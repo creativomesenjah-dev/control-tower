@@ -78,6 +78,13 @@ public:
     int  getSirenPlaying() const { return sirenPlaying.load(); }
     bool isSirenHeld() const { for (auto& h : sirenHold) if (h.held()) return true; return false; }
     void killEcho() { echoKillReq.fetch_add (1); }
+    bool isEchoSending() const { return echoSending.load(); }
+    bool isSpringSending() const { return revSending.load(); }
+    void releaseAllHolds()
+    {
+        for (auto* h : { &echoThrow, &revThrow, &echoFreeze, &echoShorter, &echoLonger }) h->mask.store (0);
+        for (auto& h : sirenHold) h.mask.store (0);
+    }
 
     // --- tempo del echo
     void tap();
@@ -143,6 +150,7 @@ private:
 
     std::atomic<int> sirenLast { 0 }, sirenPlaying { -1 };
     std::atomic<int> echoKillReq { 0 };
+    std::atomic<bool> echoSending { false }, revSending { false };
     int echoKillSeen = 0;
 
     juce::SpinLock tapLock;

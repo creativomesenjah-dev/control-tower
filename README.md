@@ -114,8 +114,8 @@ arrastrando un archivo.
 - **Aislador master**: 3, 4 o 5 vías (cambia en vivo sin clicks), ganancia y kill por banda, FLAT,
   SUB BOOST.
 - **Tape echo**: el motor de Dub Echo: inercia de cinta (cambiar el tiempo dobla el pitch), wow,
-  saturación, filtros en el loop, feedback hasta 110%, freeze y kill. Envío por throw, envío fijo o
-  perilla.
+  saturación, filtros en el loop, feedback hasta 110%, freeze y kill. Sólo entra señal con THROW (mantener) o ENVÍO FIJO;
+  la perilla NIV. ENVÍO es el nivel. El punto ENTRANDO, junto al título, se prende mientras entra señal.
 - **Spring**: reverb de resortes con cuerpo, cola, tono, y entrada desde el echo.
 - **Sirenas**: dos tonos, láser, ondulante, caída y sub drop, con tono y velocidad.
 - **Samples**: 16 ranuras. Clic derecho o arrastrar un archivo para cargar. Se recuerdan al reabrir.

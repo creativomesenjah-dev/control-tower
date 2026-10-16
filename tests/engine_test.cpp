@@ -129,6 +129,28 @@ int main (int argc, char** argv)
     std::printf ("     master %.2f | auriculares %.2f\n", r.peakLast (0, 1.0), r.peakLast (2, 1.0));
     check (r.peakLast (0, 1.0) > 0.2f && r.peakLast (2, 1.0) > 0.2f, "suena en master (1-2) y en auriculares (3-4)");
 
+    // el echo NO recibe nada sin throw ni envío fijo (aunque la fuente sea el canal que suena)
+    {
+        Rig a, b;
+        for (auto* rg : { &a, &b })
+        {
+            juce::String e2;
+            rg->e.loadTrack (0, loopFile, e2);
+            for (int i = 0; i < 400 && ! rg->e.getTrack (0)->finished.load(); ++i) juce::Thread::sleep (10);
+            rg->e.params.set (P::EchoSrc, 2.0f);
+            rg->e.params.set (P::EchoSend, 1.0f);
+            rg->e.params.set (P::RevSend, 1.0f);
+            rg->e.deck (0).pushCommand ({ DeckCmd::PlayToggle });
+        }
+        b.e.params.set (P::EchoRet, -40.0f);
+        b.e.params.set (P::RevRet, -40.0f);
+        a.run (3.0, true); b.run (3.0, true);
+        float diff = 0.0f;
+        for (size_t i = 0; i < a.rec[0].size(); ++i) diff = juce::jmax (diff, std::abs (a.rec[0][i] - b.rec[0][i]));
+        std::printf ("     sin throw: diferencia con / sin retornos de echo y spring = %.6f\n", diff);
+        check (diff < 1.0e-4f && ! a.e.isEchoSending(), "sin throw ni envío fijo no entra nada al echo ni al spring");
+    }
+
     // aislador: kill de todas las bandas = silencio; FLAT no toca los kills? (los kills se apagan con FLAT)
     for (auto k : { P::Kill1, P::Kill2, P::Kill3, P::Kill4 }) p.set (k, 1.0f);
     r.clearRec(); r.run (1.0, true);

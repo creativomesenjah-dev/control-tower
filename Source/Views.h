@@ -35,6 +35,19 @@ public:
     }
 };
 
+// Punto "ENTRANDO" junto al título: se prende sólo mientras entra señal al efecto.
+inline void paintSendingDot (juce::Graphics& g, bool on, juce::Colour c, int x)
+{
+    const juce::Rectangle<float> dot ((float) x, 9.0f, 8.0f, 8.0f);
+    g.setColour (on ? c : Colours::line);
+    g.fillEllipse (dot);
+    if (on)
+    {
+        g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+        g.drawText ("ENTRANDO", juce::Rectangle<float> ((float) x + 12.0f, 5.0f, 70.0f, 16.0f), juce::Justification::centredLeft);
+    }
+}
+
 inline juce::String formatTime (double s, bool tenths = true)
 {
     if (s < 0.0) s = 0.0;
@@ -441,7 +454,7 @@ public:
         auto knob = [&] (P param, const char* name) { auto* k = knobs.add (new ParamKnob (p, param, u8 (name))); addAndMakeVisible (k); };
         knob (P::EchoTime, "TIEMPO");
         knob (P::EchoFb, "REPETIC.");
-        knob (P::EchoSend, "ENVÍO");
+        knob (P::EchoSend, "NIV. ENVÍO");
         knob (P::EchoRet, "RETORNO");
         knob (P::EchoIner, "INERCIA");
         knob (P::EchoLow, "GRAVES");
@@ -490,7 +503,10 @@ public:
         if (engine.echoTimeIsSynced())
             t << u8 ("  ·  ") << u8 (echoDivisionLabel (engine.getEchoDivision())) << " a " << juce::roundToInt (engine.getBpm()) << " BPM";
         if (readout.getText() != t) readout.setText (t, juce::dontSendNotification);
+        if (engine.isEchoSending() != sendingShown) { sendingShown = ! sendingShown; repaint(); }
     }
+
+    void paintExtra (juce::Graphics& g) override { paintSendingDot (g, sendingShown, Colours::amber, 92); }
 
     void resized() override
     {
@@ -528,6 +544,7 @@ private:
     std::unique_ptr<ActionButton> tapB, throwB, freeze, kill;
     std::unique_ptr<ParamToggle> latch;
     juce::Label readout;
+    bool sendingShown = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -538,7 +555,7 @@ public:
     {
         auto& p = e.params;
         auto knob = [&] (P param, const char* name) { auto* k = knobs.add (new ParamKnob (p, param, u8 (name), Colours::teal)); addAndMakeVisible (k); };
-        knob (P::RevSend, "ENVÍO");
+        knob (P::RevSend, "NIV. ENVÍO");
         knob (P::RevRet, "RETORNO");
         knob (P::EchoToRev, "DEL ECHO");
         knob (P::RevSize, "CUERPO");
@@ -549,7 +566,13 @@ public:
         latch = std::make_unique<ParamToggle> (p, P::RevLatch, "FIJO", Colours::teal);
         addAndMakeVisible (*throwB); addAndMakeVisible (*latch);
     }
-    void refresh() override { for (auto* k : knobs) k->refresh(); throwB->refresh(); latch->refresh(); }
+    void refresh() override
+    {
+        for (auto* k : knobs) k->refresh();
+        throwB->refresh(); latch->refresh();
+        if (engine.isSpringSending() != sendingShown) { sendingShown = ! sendingShown; repaint(); }
+    }
+    void paintExtra (juce::Graphics& g) override { paintSendingDot (g, sendingShown, Colours::teal, 64); }
     void resized() override
     {
         auto r = content();
@@ -566,6 +589,7 @@ private:
     juce::OwnedArray<ParamKnob> knobs;
     std::unique_ptr<ActionButton> throwB;
     std::unique_ptr<ParamToggle> latch;
+    bool sendingShown = false;
 };
 
 // ---------------------------------------------------------------------------

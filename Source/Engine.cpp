@@ -7,6 +7,9 @@ Engine::Engine()
 {
     for (auto* v : { &aL, &aR, &bL, &bR, &mixL, &mixR, &cueL, &cueR, &echoIn, &echoOut, &revIn, &sirenBuf, &sampL, &sampR, &tmp })
         v->assign (kMaxBlock, 0.0f);
+    // todas las rampas que abren algo arrancan cerradas (si no, el primer bloque se cuela)
+    for (auto* r : { &echoSendRamp, &revSendRamp, &inRamp, &revToRamp })
+        r->snap (0.0f);
     writerThread.startThread();
 }
 
@@ -293,8 +296,13 @@ void Engine::processChunk (const float* const* in, int numIn, float* const* out,
     juce::FloatVectorOperations::copy (revIn.data(), echoIn.data(), n);
 
     // ganancias de envío
-    const float eSend = juce::jlimit (0.0f, 1.0f, p.get (P::EchoSend) + (p.on (P::EchoLatch) ? 1.0f : 0.0f) + (echoThrow.held() ? 1.0f : 0.0f));
-    const float rSend = juce::jlimit (0.0f, 1.0f, p.get (P::RevSend) + (p.on (P::RevLatch) ? 1.0f : 0.0f) + (revThrow.held() ? 1.0f : 0.0f));
+    // los canales sólo entran al echo / spring con THROW (mantener) o ENVÍO FIJO; la perilla es el nivel
+    const bool echoOpen = p.on (P::EchoLatch) || echoThrow.held();
+    const bool revOpen  = p.on (P::RevLatch) || revThrow.held();
+    const float eSend = echoOpen ? p.get (P::EchoSend) : 0.0f;
+    const float rSend = revOpen ? p.get (P::RevSend) : 0.0f;
+    echoSending.store (echoOpen);
+    revSending.store (revOpen);
     echoSendRamp.set (eSend);
     revSendRamp.set (rSend);
     echoSendRamp.apply (echoIn.data(), n);

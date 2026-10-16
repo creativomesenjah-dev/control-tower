@@ -77,7 +77,15 @@ void Controller::perform (A a, int src, bool down)
         case A::SrcCh2:  if (down) p.set (P::EchoSrc, 1.0f); return;
         case A::SrcBoth: if (down) p.set (P::EchoSrc, 2.0f); return;
         case A::IsoModeNext: if (down) p.set (P::IsoMode, (float) ((p.choice (P::IsoMode) + 1) % 3)); return;
-        case A::EchoKill:   if (down) engine.killEcho(); return;
+        case A::EchoKill:
+            if (down)
+            {
+                engine.killEcho();
+                // seguridad: si algún throw / freeze quedó trabado, el kill también lo suelta
+                for (auto* h : { &engine.echoThrow, &engine.echoFreeze }) h->mask.store (0);
+                p.set (P::EchoLatch, 0.0f);
+            }
+            return;
         case A::EchoLatchT: if (down) p.toggle (P::EchoLatch); return;
         case A::RevLatchT:  if (down) p.toggle (P::RevLatch); return;
         case A::Tap:        if (down) engine.tap(); return;
@@ -351,7 +359,7 @@ void Controller::handleFlx4 (const juce::MidiMessage& m)
                 }
                 break;
             }
-            case 0x63: case 0x64: if (press) engine.killEcho(); break;
+            case 0x63: case 0x64: if (press) perform (A::EchoKill, Hold::Midi, true); break;
             case 0x4A: if (press) engine.stepEchoDivision (-1); break;
             case 0x4B: if (press) engine.stepEchoDivision (1); break;
             case 0x10: p.set (P::EchoSrc, press ? 0.0f : 2.0f); break;   // selector de canal en 1

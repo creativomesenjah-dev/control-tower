@@ -57,7 +57,7 @@ enum class Unit { Db, Pct, Hz, Ms, Sec, Eq, Bi, Choice, Toggle, Raw };
     X (Limiter,     "limiter",    "Master: limitador",            0.f,   1.f,   1.f,    0.f,   Toggle) \
     X (EchoTime,    "echoTime",   "Echo: tiempo",                20.f, 2000.f, 450.f,  450.f,   Ms)     \
     X (EchoFb,      "echoFb",     "Echo: repeticiones",           0.f, 110.f,  55.f,    0.f,   Pct)    \
-    X (EchoSend,    "echoSend",   "Echo: envío",                  0.f,   1.f,   0.f,    0.f,   Pct)    \
+    X (EchoSend,    "echoSendLvl","Echo: nivel del envío",        0.f,   1.f,   1.f,    0.f,   Pct)    \
     X (EchoLatch,   "echoLatch",  "Echo: envío fijo",             0.f,   1.f,   0.f,    0.f,   Toggle) \
     X (EchoRet,     "echoRet",    "Echo: retorno",              -40.f,   6.f,   0.f,  -10.f,   Db)     \
     X (EchoSrc,     "echoSrc",    "Echo / spring: fuente",        0.f,   2.f,   2.f,    0.f,   Choice) \
@@ -66,7 +66,7 @@ enum class Unit { Db, Pct, Hz, Ms, Sec, Eq, Bi, Choice, Toggle, Raw };
     X (EchoWow,     "echoWow",    "Echo: wow",                    0.f, 100.f,  25.f,    0.f,   Pct)    \
     X (EchoSat,     "echoSat",    "Echo: saturación",             0.f, 100.f,  35.f,    0.f,   Pct)    \
     X (EchoIner,    "echoIner",   "Echo: inercia",              0.02f,   2.f, .35f,   .35f,   Sec)    \
-    X (RevSend,     "revSend",    "Spring: envío",                0.f,   1.f,   0.f,    0.f,   Pct)    \
+    X (RevSend,     "revSendLvl", "Spring: nivel del envío",      0.f,   1.f,   1.f,    0.f,   Pct)    \
     X (RevLatch,    "revLatch",   "Spring: envío fijo",           0.f,   1.f,   0.f,    0.f,   Toggle) \
     X (RevRet,      "revRet",     "Spring: retorno",            -40.f,   6.f,  -3.f,  -10.f,   Db)     \
     X (RevSize,     "revSize",    "Spring: cuerpo",               0.f,   1.f,   .5f,    0.f,   Pct)    \
