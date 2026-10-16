@@ -1,0 +1,22 @@
+CONTROL TOWER — preamp de sound system
+
+INSTALAR
+1. Arrastrá "Control Tower" a la carpeta Aplicaciones.
+2. La primera vez abrilo con clic derecho > Abrir > Abrir (no está firmada por Apple).
+3. Cuando pregunte por el micrófono, tocá "Aceptar" (es para la entrada en vivo).
+
+CON LA DDJ-FLX4
+- Cerrá rekordbox.
+- En AUDIO / SALIDAS elegí la DDJ-FLX4: master = salidas 1-2, auriculares = 3-4.
+- MASTER OUT de la FLX4 a la mesa, como siempre.
+- BIBLIOTECA: "+ CARPETA" y elegí la carpeta de tu música. Después: BROWSE para recorrer,
+  apretar BROWSE para pasar de carpetas a temas, LOAD para cargar.
+
+PADS DE LA FLX4
+- HOT CUE: hot cues
+- KEYBOARD: sirenas (1-5), throw echo (6), throw spring (7), freeze (8)
+- BEAT JUMP: kills del aislador (1-5), FLAT (6), SUB BOOST (7), kill echo (8)
+- BEAT LOOP: tiempo del echo (1-7) y TAP (8)
+- SAMPLER: samples
+
+Más detalle: README del proyecto en GitHub.
