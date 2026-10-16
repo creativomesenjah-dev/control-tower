@@ -6,6 +6,7 @@ namespace ct
 namespace
 {
     bool isFlx4Name (const juce::String& n) { return n.containsIgnoreCase ("DDJ-FLX4") || n.containsIgnoreCase ("DDJ FLX4"); }
+    bool isNanoName (const juce::String& n) { return n.containsIgnoreCase ("nanoPAD"); }
 }
 
 Controller::Controller (Engine& e, Library& l, juce::AudioDeviceManager& dm)
@@ -69,6 +70,13 @@ void Controller::perform (A a, int src, bool down)
         case A::EchoThrow:  engine.echoThrow.set (src, down); return;
         case A::EchoFreeze: engine.echoFreeze.set (src, down); return;
         case A::RevThrow:   engine.revThrow.set (src, down); return;
+        case A::BothThrow:  engine.echoThrow.set (src, down); engine.revThrow.set (src, down); return;
+        case A::EchoShorter: engine.echoShorter.set (src, down); return;
+        case A::EchoLonger:  engine.echoLonger.set (src, down); return;
+        case A::SrcCh1:  if (down) p.set (P::EchoSrc, 0.0f); return;
+        case A::SrcCh2:  if (down) p.set (P::EchoSrc, 1.0f); return;
+        case A::SrcBoth: if (down) p.set (P::EchoSrc, 2.0f); return;
+        case A::IsoModeNext: if (down) p.set (P::IsoMode, (float) ((p.choice (P::IsoMode) + 1) % 3)); return;
         case A::EchoKill:   if (down) engine.killEcho(); return;
         case A::EchoLatchT: if (down) p.toggle (P::EchoLatch); return;
         case A::RevLatchT:  if (down) p.toggle (P::RevLatch); return;
@@ -104,6 +112,11 @@ void Controller::perform (A a, int src, bool down)
 // ---------------------------------------------------------------------------
 void Controller::handleIncomingMidiMessage (juce::MidiInput* source, const juce::MidiMessage& m)
 {
+    dispatch (source != nullptr ? source->getName() : juce::String(), m);
+}
+
+void Controller::dispatch (const juce::String& deviceName, const juce::MidiMessage& m)
+{
     if (m.isMidiClock() || m.isActiveSense() || m.isSysEx()) return;
 
     int type = 0, number = 0;
@@ -116,11 +129,12 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput* source, const juce:
     else return;
 
     const int key = packKey (type, m.getChannel(), number);
-    const bool fromFlx4 = source != nullptr && isFlx4Name (source->getName());
+    const bool fromFlx4 = isFlx4Name (deviceName);
+    const bool fromNano = isNanoName (deviceName);
 
     {
         const juce::SpinLock::ScopedLockType sl (lastLock);
-        lastMidi = (source != nullptr ? source->getName() + ": " : juce::String())
+        lastMidi = (deviceName.isNotEmpty() ? deviceName + ": " : juce::String())
                  + (type == 1 ? "nota " + juce::String (number) : type == 2 ? "CC " + juce::String (number) : juce::String ("pitch bend"))
                  + u8 (" · canal ") + juce::String (m.getChannel()) + " = " + juce::String (juce::roundToInt (value * 127.0f));
     }
@@ -129,6 +143,8 @@ void Controller::handleIncomingMidiMessage (juce::MidiInput* source, const juce:
 
     if (fromFlx4 && flx4Enabled.load())
         handleFlx4 (m);
+    else if (fromNano && nanoEnabled.load())
+        handleNano (m);
 }
 
 bool Controller::handleLearned (const juce::MidiMessage&, int key, float value, bool press, bool isButton)
@@ -182,7 +198,13 @@ void Controller::applyTarget (int target, float value01, bool press, bool, int s
         perform ((A) (target - kActionBase), src, press);
         return;
     }
-    const auto p = (P) target;
+    auto p = (P) target;
+    // mientras suena una sirena, los controles de tiempo y feedback del echo tocan la sirena
+    if (engine.isSirenHeld())
+    {
+        if (p == P::EchoTime) p = P::SirenPitch;
+        else if (p == P::EchoFb) p = P::SirenRate;
+    }
     if (paramInfo (p).unit == Unit::Toggle) { if (press) engine.params.toggle (p); }
     else engine.params.setNorm (p, value01);
 }
@@ -289,6 +311,10 @@ void Controller::handleFlx4 (const juce::MidiMessage& m)
                 break;
             case 0x54: if (press) p.toggle (d == 0 ? P::CueA : P::CueB); break;
             case 0x36: case 0x67: cmd (DeckCmd::JogTouch, 0, press ? 1.0 : 0.0); break;
+            // botones de modo de pad: la FLX4 sólo cambia de modo cuando el programa le enciende la luz
+            case 0x1B: case 0x69: case 0x1E: case 0x6B: case 0x20: case 0x6D: case 0x22: case 0x6F:
+                if (press) confirmFlx4PadMode (d, d1);
+                break;
             default: break;
         }
         return;
@@ -310,8 +336,21 @@ void Controller::handleFlx4 (const juce::MidiMessage& m)
     {
         switch (d1)
         {
-            case 0x47: if (press) p.toggle (P::EchoLatch); break;
-            case 0x43: if (press) p.toggle (P::RevLatch); break;
+            case 0x47: case 0x43:
+            {
+                // tocar y soltar rápido = envío fijo on/off; mantener = throw mientras se mantiene
+                const bool spring = d1 == 0x43;
+                auto& hold = spring ? engine.revThrow : engine.echoThrow;
+                const int k = spring ? 1 : 0;
+                const double now = juce::Time::getMillisecondCounterHiRes();
+                if (press) { fxOnOffPressMs[k] = now; hold.set (Hold::Midi2, true); }
+                else
+                {
+                    hold.set (Hold::Midi2, false);
+                    if (now - fxOnOffPressMs[k] < 300.0) p.toggle (spring ? P::RevLatch : P::EchoLatch);
+                }
+                break;
+            }
             case 0x63: case 0x64: if (press) engine.killEcho(); break;
             case 0x4A: if (press) engine.stepEchoDivision (-1); break;
             case 0x4B: if (press) engine.stepEchoDivision (1); break;
@@ -343,13 +382,19 @@ void Controller::handleFlx4 (const juce::MidiMessage& m)
             else if (i == 6) engine.revThrow.set (src, press);
             else engine.echoFreeze.set (src, press);
         }
-        else if (group == 0x20)     // BEAT JUMP -> AISLADOR
+        else if (group == 0x10)     // PAD FX1 -> ECHO Y SPRING
+        {
+            static const A fx[8] = { A::EchoThrow, A::RevThrow, A::EchoFreeze, A::EchoKill,
+                                     A::EchoShorter, A::EchoLonger, A::EchoLatchT, A::RevLatchT };
+            perform (fx[i], src, press);
+        }
+        else if (group == 0x20)     // BEAT JUMP -> AISLADOR (divisor de frecuencias)
         {
             if (! press) return;
             if (i < 5) perform ((A) ((int) A::KillT1 + i), src, true);
             else if (i == 5) perform (A::Flat, src, true);
             else if (i == 6) perform (A::SubBoostT, src, true);
-            else engine.killEcho();
+            else perform (A::IsoModeNext, src, true);
         }
         else if (group == 0x60)     // BEAT LOOP -> TIEMPO DEL ECHO
         {
@@ -362,6 +407,73 @@ void Controller::handleFlx4 (const juce::MidiMessage& m)
             const int slot = d * 8 + i;
             if (sh) engine.getSampler().stop (slot); else engine.getSampler().trigger (slot);
         }
+    }
+}
+
+void Controller::confirmFlx4PadMode (int deck, int modeNote)
+{
+    flx4PadMode[deck].store (modeNote);
+    flx4ModeDirty.store (true);
+    // la luz se manda en el hilo de mensajes (ahí vive la salida MIDI)
+    runOnMessageThread ([this, deck, modeNote]
+    {
+        ledCache.erase (((0x90 + deck) << 8) | modeNote);   // reenviar aunque ya se haya mandado antes
+        if (flx4Out != nullptr) updateLeds();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// KORG nanoPAD2 de fábrica: 4 escenas de 16 pads (notas 36-51, 52-67, 68-83, 84-99),
+// pad XY: X = pitch bend, Y = CC 1.
+void Controller::handleNano (const juce::MidiMessage& m)
+{
+    auto& p = engine.params;
+    const int src = Hold::Midi2;
+
+    auto axis = [&] (int idx, float v, bool isRest)
+    {
+        // al soltar el dedo el pad vuelve al centro / cero: ese salto se ignora
+        if (isRest && nanoLast[idx] >= 0.0f && std::abs (v - nanoLast[idx]) > 0.3f) return;
+        nanoLast[idx] = v;
+        P target = idx == 0 ? P::EchoTime : P::EchoFb;
+        if (engine.isSirenHeld()) target = idx == 0 ? P::SirenPitch : P::SirenRate;
+        p.setNorm (target, v);
+    };
+
+    if (m.isPitchWheel()) { const int v = m.getPitchWheelValue(); axis (0, v / 16383.0f, v == 8192); return; }
+    if (m.isController())
+    {
+        const int cc = m.getControllerNumber(), v = m.getControllerValue();
+        if (cc == 1) axis (1, v / 127.0f, v == 0);
+        return;
+    }
+    if (! m.isNoteOnOrOff()) return;
+
+    const bool press = m.isNoteOn() && m.getVelocity() > 0;
+    const int note = m.getNoteNumber();
+    if (note < 36 || note > 99) return;
+    const int scene = (note - 36) / 16, i = (note - 36) % 16;
+
+    static const A scene1[16] = {   // DUB / ECHO (igual que Dub Echo)
+        A::EchoThrow, A::Tap, A::EchoKill, A::EchoFreeze, A::EchoLatchT,
+        A::Div2, A::Div3, A::Div4, A::Div5, A::Div7, A::EchoShorter, A::EchoLonger,
+        A::Siren1, A::Siren2, A::Siren3, A::Siren4 };
+    static const A scene2[16] = {   // SPRING, AISLADOR Y ENVÍOS
+        A::RevThrow, A::RevLatchT, A::BothThrow, A::Siren5,
+        A::KillT1, A::KillT2, A::KillT3, A::KillT4, A::KillT5, A::Flat, A::SubBoostT, A::IsoModeNext,
+        A::SrcCh1, A::SrcCh2, A::SrcBoth, A::SmpStop };
+    static const A scene4[16] = {   // DECKS
+        A::Play1, A::Cue1, A::Play2, A::Cue2,
+        A::Hot1A, A::Hot1B, A::Hot1C, A::Hot1D, A::Hot2A, A::Hot2B, A::Hot2C, A::Hot2D,
+        A::Reloop1, A::Reloop2, A::Load1, A::Load2 };
+
+    switch (scene)
+    {
+        case 0: perform (scene1[i], src, press); break;
+        case 1: perform (scene2[i], src, press); break;
+        case 2: perform ((A) ((int) A::Smp1 + i), src, press); break;   // SAMPLES 1-16
+        case 3: perform (scene4[i], src, press); break;
+        default: break;
     }
 }
 
@@ -393,6 +505,10 @@ void Controller::timerCallback()
         for (auto& d : juce::MidiInput::getAvailableDevices())
             if (isFlx4Name (d.name) && devices.isMidiInputDeviceEnabled (d.identifier)) inOk = true;
         flx4In.store (inOk);
+        bool nanoOk = false;
+        for (auto& d : juce::MidiInput::getAvailableDevices())
+            if (isNanoName (d.name) && devices.isMidiInputDeviceEnabled (d.identifier)) nanoOk = true;
+        nanoIn.store (nanoOk);
 
         juce::String outId;
         for (auto& d : juce::MidiOutput::getAvailableDevices())
@@ -441,12 +557,30 @@ void Controller::updateLeds()
         sendLed (st, 0x10, dk.isLoopActive() ? 0x7F : 0);
         sendLed (st, 0x11, dk.isLoopActive() ? 0x7F : 0);
 
+        // luz del botón de modo activo (así la FLX4 cambia de modo)
+        const int mode = flx4PadMode[d].load();
+        sendLed (st, mode, 0x7F);
+
         const int ps = 0x97 + 2 * d;
         const int src = d == 0 ? Hold::Midi : Hold::Midi2;
         juce::ignoreUnused (src);
         for (int i = 0; i < 8; ++i)
         {
             sendLed (ps, 0x00 + i, dk.getHotcueSeconds (i) >= 0.0 ? 0x7F : 0);
+
+            bool fx = false;
+            switch (i)
+            {
+                case 0: fx = engine.echoThrow.held(); break;
+                case 1: fx = engine.revThrow.held(); break;
+                case 2: fx = engine.echoFreeze.held(); break;
+                case 4: fx = engine.echoShorter.held(); break;
+                case 5: fx = engine.echoLonger.held(); break;
+                case 6: fx = p.on (P::EchoLatch); break;
+                case 7: fx = p.on (P::RevLatch); break;
+                default: break;
+            }
+            sendLed (ps, 0x10 + i, fx ? 0x7F : 0);
 
             int dub = 0;
             if (i < 5) dub = engine.getSirenPlaying() == i ? 0x7F : 0;
@@ -458,6 +592,7 @@ void Controller::updateLeds()
             int iso = 0;
             if (i < 5) iso = p.on ((P) ((int) P::Kill1 + i)) ? 0x7F : 0;
             else if (i == 6) iso = p.on (P::SubBoost) ? 0x7F : 0;
+            else if (i == 7) iso = p.choice (P::IsoMode) == 2 ? 0x7F : 0;
             sendLed (ps, 0x20 + i, iso);
 
             sendLed (ps, 0x60 + i, (i < 7 && engine.getEchoDivision() == i && engine.echoTimeIsSynced()) ? 0x7F : 0);

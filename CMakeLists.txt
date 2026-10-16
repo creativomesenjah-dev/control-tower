@@ -54,7 +54,7 @@ target_link_libraries(ControlTower
 option(CT_TESTS "Compilar pruebas del motor" OFF)
 if(CT_TESTS)
     juce_add_console_app(EngineTest PRODUCT_NAME "EngineTest")
-    target_sources(EngineTest PRIVATE tests/engine_test.cpp Source/Engine.cpp)
+    target_sources(EngineTest PRIVATE tests/engine_test.cpp Source/Engine.cpp Source/Controller.cpp)
     target_include_directories(EngineTest PRIVATE Source)
     target_compile_definitions(EngineTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
         $<$<NOT:$<PLATFORM_ID:Darwin>>:JUCE_USE_MP3AUDIOFORMAT=1>)

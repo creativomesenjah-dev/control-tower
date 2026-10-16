@@ -35,6 +35,7 @@ private:
     void autoRouteOutputs (bool force);
     void showAudioSettings();
     void showMidiMap();
+    void showGuide();
     void toggleRecording();
     void releaseKeys();
 
@@ -46,7 +47,7 @@ private:
     Controller controller { engine, library, deviceManager };
 
     juce::Label title, subtitle, status, info;
-    juce::TextButton audioButton { "AUDIO / SALIDAS" }, midiButton { "MAPEO MIDI" };
+    juce::TextButton audioButton { "AUDIO / SALIDAS" }, midiButton { "MAPEO MIDI" }, guideButton { u8 ("GUÍA") };
     DeckView deck1 { engine, controller, 0 }, deck2 { engine, controller, 1 };
     MixerView mixer { engine };
     IsolatorView isolator { engine, controller };

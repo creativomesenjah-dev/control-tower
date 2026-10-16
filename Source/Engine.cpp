@@ -363,6 +363,10 @@ void Engine::processChunk (const float* const* in, int numIn, float* const* out,
         const int k = echoKillReq.load();
         if (k != echoKillSeen) { echoKillSeen = k; echo.triggerKill(); }
 
+        // tiempo más corto / más largo mientras se mantiene (la inercia de cinta lo vuelve un glide)
+        const int ramp = (echoLonger.held() ? 1 : 0) - (echoShorter.held() ? 1 : 0);
+        if (ramp != 0) p.setNorm (P::EchoTime, p.getNorm (P::EchoTime) + (float) ramp * 0.3f * (float) n / sr);
+
         TapeEchoParams ep;
         ep.timeMs     = p.get (P::EchoTime);
         ep.feedback   = p.get (P::EchoFb) * 0.01f;

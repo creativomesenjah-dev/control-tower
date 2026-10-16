@@ -39,7 +39,10 @@ public:
         invert.setButtonText (u8 ("Invertir el fader de tempo de la FLX4"));
         invert.setToggleState (ctrl.isTempoInverted(), juce::dontSendNotification);
         invert.onClick = [this] { ctrl.setTempoInverted (invert.getToggleState()); };
-        addAndMakeVisible (flx4); addAndMakeVisible (invert);
+        nano.setButtonText (u8 ("Usar el mapeo de fábrica del nanoPAD2 (4 escenas)"));
+        nano.setToggleState (ctrl.isNanoMappingOn(), juce::dontSendNotification);
+        nano.onClick = [this] { ctrl.setNanoMappingOn (nano.getToggleState()); };
+        addAndMakeVisible (flx4); addAndMakeVisible (invert); addAndMakeVisible (nano);
 
         hint.setText (u8 ("Con la DDJ-FLX4: salidas 1-2 = MASTER OUT (a la mesa), salidas 3-4 = auriculares.\n"
                           "Activá la FLX4 (y cualquier otro controlador) en \"Active MIDI inputs\"."),
@@ -47,7 +50,7 @@ public:
         hint.setColour (juce::Label::textColourId, Colours::textDim);
         hint.setFont (juce::FontOptions (12.0f));
         addAndMakeVisible (hint);
-        setSize (560, 640);
+        setSize (560, 680);
         startTimer (1000);
     }
 
@@ -57,6 +60,7 @@ public:
     {
         auto r = getLocalBounds().reduced (12);
         hint.setBounds (r.removeFromBottom (40));
+        nano.setBounds (r.removeFromBottom (24));
         invert.setBounds (r.removeFromBottom (24));
         flx4.setBounds (r.removeFromBottom (24));
         r.removeFromBottom (6);
@@ -84,7 +88,7 @@ private:
     juce::AudioDeviceSelectorComponent selector;
     juce::ComboBox masterCombo, phonesCombo;
     juce::Label masterLabel, phonesLabel, hint;
-    juce::ToggleButton flx4, invert;
+    juce::ToggleButton flx4, invert, nano;
 };
 
 // ---------------------------------------------------------------------------

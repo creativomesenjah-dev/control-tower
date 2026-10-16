@@ -45,23 +45,51 @@ Mac ── USB ── DDJ-FLX4 ── MASTER OUT ──► mesa (2 canales de la
 | Faders, crossfader | como siempre |
 | CUE de canal, HEADPHONES MIX | cue en auriculares y mezcla cue / master |
 | BEAT FX LEVEL/DEPTH | repeticiones del echo |
-| BEAT FX ON/OFF | envío fijo al echo (SHIFT: envío fijo al spring) |
+| BEAT FX ON/OFF | **tocar**: envío fijo al echo · **mantener**: throw al echo |
+| SHIFT + ON/OFF | lo mismo para el spring |
 | BEAT FX SELECT | kill del echo |
 | BEAT ◀ ▶ | división del echo |
 | Selector CH 1 / CH 2 de BEAT FX | qué canal manda al echo y al spring (en el medio: los dos) |
 
 ### Pads (8 por lado, según el modo)
 
+La FLX4 cambia de modo cuando el programa le confirma el botón; Control Tower lo hace solo.
+
 | Modo del pad | Pads 1 a 8 |
 |---|---|
 | **HOT CUE** | hot cues 1-8 (SHIFT + pad: borrar) |
-| **KEYBOARD** → *dub* | 1 dos tonos · 2 láser · 3 ondulante · 4 caída · 5 sub drop · 6 throw al echo · 7 throw al spring · 8 freeze del echo (todos se mantienen) |
-| **BEAT JUMP** → *aislador* | 1-5 kill de cada banda · 6 FLAT · 7 SUB BOOST · 8 kill del echo |
-| **BEAT LOOP** → *tiempo del echo* | 1/16 · 1/8 · 1/8· · 1/4 · 1/4· · 1/2 · 1/4T · TAP |
+| **PAD FX1** → *echo y spring* | 1 throw echo · 2 throw spring · 3 freeze · 4 kill echo · 5 tiempo − · 6 tiempo + (mantener) · 7 envío fijo echo · 8 envío fijo spring |
+| **BEAT JUMP** → *aislador* | 1-5 kill de cada banda · 6 FLAT · 7 SUB BOOST · 8 cambiar vías 3/4/5 |
 | **SAMPLER** | samples 1-8 (izquierda) y 9-16 (derecha); SHIFT + pad: parar |
+| **KEYBOARD** (SHIFT) → *sirenas* | 1 dos tonos · 2 láser · 3 ondulante · 4 caída · 5 sub drop · 6 throw echo · 7 throw spring · 8 freeze |
+| **BEAT LOOP** (SHIFT) → *tiempo del echo* | 1/16 · 1/8 · 1/8· · 1/4 · 1/4· · 1/2 · 1/4T · TAP |
+| **PAD FX2**, **KEY SHIFT** | libres para asignar en MAPEO MIDI |
 
 Las luces de la FLX4 siguen el estado: play, cue, loops, hot cues marcados, samples cargados,
-kills y sirenas activas, y los vúmetros de canal.
+kills, throws y sirenas activas, y los vúmetros de canal.
+
+## KORG nanoPAD2 (al mismo tiempo que la FLX4)
+
+Se detecta solo. Usa las 4 escenas (botón SCENE): 64 pads.
+
+- **Pad XY**: X = tiempo del echo, Y = repeticiones. Con una sirena sonando, X = tono e Y = velocidad
+  de la sirena. Al soltar el dedo, los valores quedan donde estaban.
+- **Escena 1 · dub / echo** (como Dub Echo): throw, tap, kill, freeze, envío fijo, 1/8, 1/8·, 1/4,
+  1/4·, 1/4T, tiempo −, tiempo +, sirenas dos tonos, láser, ondulante y caída.
+- **Escena 2 · spring, aislador y envíos**: throw spring, spring fijo, throw echo + spring, sub drop,
+  kills 1-5, FLAT, SUB BOOST, vías 3/4/5, envío desde canal 1 / 2 / los dos, parar samples.
+- **Escena 3 · samples 1 a 16.**
+- **Escena 4 · decks**: play y cue de cada deck, hot cues 1-4 de cada deck, reloop 1 y 2, load 1 y 2.
+
+Supone las notas de fábrica (36-51, 52-67, 68-83, 84-99). Si tu nanoPAD2 manda otras, cualquier pad
+se reasigna en MAPEO MIDI. La ventana **GUÍA** de la app tiene todos los mapas.
+
+## Samples de fábrica
+
+La primera vez, Control Tower genera 8 samples de dub (sintetizados, sin derechos de terceros) en
+*Música / Control Tower / Samples de fabrica* y los carga en las ranuras 1 a 8: AIRHORN, DISPARO,
+LASER, BOMBA, SUB BOOM, RISER, SNARE y SIRENA CORTA. Se reemplazan con clic derecho en el pad o
+arrastrando un archivo.
 
 ## Teclado
 

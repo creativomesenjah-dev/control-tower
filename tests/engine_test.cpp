@@ -1,6 +1,8 @@
 // Prueba del motor completo sin placa de audio: un dispositivo simulado llama al callback de audio.
 // También renderiza una demo (preamp_demo.wav) en la carpeta pasada como argumento.
 #include "Engine.h"
+#include "Controller.h"
+#include "FactorySamples.h"
 #include <chrono>
 #include <cstdio>
 
@@ -190,6 +192,87 @@ int main (int argc, char** argv)
     r.e.stopRecording();
     std::printf ("     grabación: %s (%lld bytes)\n", recFile.getFileName().toRawUTF8(), (long long) recFile.getSize());
     check (recFile.getSize() > 44100 * 4 / 2, "la grabación queda en disco");
+
+    // ---------------- controladores: FLX4 y nanoPAD2 simulados
+    {
+        Rig c;
+        auto& q = c.e.params;
+        Library lib;
+        juce::AudioDeviceManager dm;
+        Controller ctrl (c.e, lib, dm);
+        auto flx = [&] (int st, int d1, int d2) { ctrl.dispatch ("DDJ-FLX4", juce::MidiMessage (st, d1, d2)); };
+        auto nano = [&] (const juce::MidiMessage& m) { ctrl.dispatch ("nanoPAD2", m); };
+
+        flx (0x90, 0x1E, 0x7F); flx (0x90, 0x1E, 0x00);
+        check (ctrl.getFlx4PadMode (0) == 0x1E, "FLX4: el botón PAD FX1 cambia el modo del deck 1");
+
+        flx (0x97, 0x10, 0x7F);
+        check (c.e.echoThrow.held(), "FLX4 PAD FX1 pad 1: throw al echo mientras se mantiene");
+        flx (0x97, 0x10, 0x00);
+        check (! c.e.echoThrow.held(), "FLX4 PAD FX1 pad 1: suelta el throw");
+        flx (0x99, 0x11, 0x7F); check (c.e.revThrow.held(), "FLX4 PAD FX1 pad 2 (deck 2): throw al spring"); flx (0x99, 0x11, 0x00);
+
+        const float t0 = q.get (P::EchoTime);
+        flx (0x97, 0x14, 0x7F); c.run (0.5); flx (0x97, 0x14, 0x00);
+        std::printf ("     tiempo del echo: %.0f -> %.0f ms con TIEMPO − mantenido 0,5 s\n", t0, q.get (P::EchoTime));
+        check (q.get (P::EchoTime) < t0 - 50.0f, "FLX4 PAD FX1 pad 5: acorta el tiempo del echo");
+
+        // ON/OFF: tocar = envío fijo; mantener = throw (sin cambiar el envío fijo)
+        flx (0x94, 0x47, 0x7F); flx (0x94, 0x47, 0x00);
+        check (q.on (P::EchoLatch), "FLX4 BEAT FX ON/OFF tocado: envío fijo al echo");
+        flx (0x94, 0x47, 0x7F); flx (0x94, 0x47, 0x00);
+        check (! q.on (P::EchoLatch), "FLX4 BEAT FX ON/OFF tocado otra vez: lo apaga");
+        flx (0x94, 0x47, 0x7F); juce::Thread::sleep (400);
+        check (c.e.echoThrow.held(), "FLX4 BEAT FX ON/OFF mantenido: throw");
+        flx (0x94, 0x47, 0x00);
+        check (! c.e.echoThrow.held() && ! q.on (P::EchoLatch), "FLX4 BEAT FX ON/OFF: al soltar termina el throw");
+
+        q.set (P::IsoMode, 1.0f);
+        flx (0x97, 0x27, 0x7F); flx (0x97, 0x27, 0x00);
+        check (q.choice (P::IsoMode) == 2, "FLX4 BEAT JUMP pad 8: cambia las vías del aislador");
+        flx (0x97, 0x20, 0x7F); flx (0x97, 0x20, 0x00);
+        check (q.on (P::Kill1), "FLX4 BEAT JUMP pad 1: kill de la banda 1");
+
+        // nanoPAD2
+        nano (juce::MidiMessage::noteOn (1, 36, (juce::uint8) 100));
+        check (c.e.echoThrow.held(), "nanoPAD2 escena 1, pad 1: throw al echo");
+        nano (juce::MidiMessage::noteOff (1, 36));
+        nano (juce::MidiMessage::pitchWheel (1, 16000));
+        check (q.getNorm (P::EchoTime) > 0.95f, "nanoPAD2 eje X: tiempo del echo");
+        nano (juce::MidiMessage::pitchWheel (1, 8192));
+        check (q.getNorm (P::EchoTime) > 0.95f, "nanoPAD2 eje X: al soltar el dedo no salta al centro");
+        nano (juce::MidiMessage::controllerEvent (1, 1, 30));
+        check (std::abs (q.getNorm (P::EchoFb) - 30 / 127.0f) < 0.01f, "nanoPAD2 eje Y: repeticiones");
+
+        const float fbBefore = q.get (P::EchoFb), timeBefore = q.get (P::EchoTime);
+        nano (juce::MidiMessage::noteOn (1, 48, (juce::uint8) 100));     // sirena dos tonos
+        nano (juce::MidiMessage::pitchWheel (1, 12000));
+        nano (juce::MidiMessage::controllerEvent (1, 1, 100));
+        check (c.e.isSirenHeld() && std::abs (q.get (P::EchoFb) - fbBefore) < 1e-4f && std::abs (q.get (P::EchoTime) - timeBefore) < 1e-3f
+               && q.getNorm (P::SirenRate) > 0.7f, "nanoPAD2: con la sirena sonando el XY toca la sirena");
+        nano (juce::MidiMessage::noteOff (1, 48));
+
+        nano (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100)); nano (juce::MidiMessage::noteOff (1, 60));
+        check (q.on (P::Kill5), "nanoPAD2 escena 2: kill de banda 5");
+
+        const auto files = factory::install (dir.getChildFile ("samples"));
+        c.e.loadSample (0, files[0]);
+        nano (juce::MidiMessage::noteOn (1, 68, (juce::uint8) 100)); nano (juce::MidiMessage::noteOff (1, 68));
+        c.run (0.05);
+        check (c.e.getSampler().isPlaying (0), "nanoPAD2 escena 3: dispara el sample 1");
+
+        c.e.loadTrack (0, loopFile, err);
+        for (int i = 0; i < 400 && ! c.e.getTrack (0)->finished.load(); ++i) juce::Thread::sleep (10);
+        c.run (0.05);
+        nano (juce::MidiMessage::noteOn (1, 84, (juce::uint8) 100)); nano (juce::MidiMessage::noteOff (1, 84));
+        c.run (0.1);
+        check (c.e.deck (0).isPlaying(), "nanoPAD2 escena 4: play del deck 1");
+
+        std::printf ("     samples de fábrica:");
+        for (auto& f : files) std::printf (" %s", f.getFileNameWithoutExtension().toRawUTF8());
+        std::printf ("\n");
+        check (files.size() == 8 && files[3].getSize() > 100000, "samples de fábrica generados");
+    }
 
     // ---------------- demo: 45 s de "sesión"
     {

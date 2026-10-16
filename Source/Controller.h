@@ -49,6 +49,13 @@ enum class Kind { Hold, Trigger };
     X (Div5,       "div5",       "Echo: 1/4 con puntillo",          Trigger) \
     X (Div6,       "div6",       "Echo: 1/2",                       Trigger) \
     X (Div7,       "div7",       "Echo: 1/4 tresillo",              Trigger) \
+    X (EchoShorter,"echoShorter","Echo: tiempo más corto (mantener)", Hold)  \
+    X (EchoLonger, "echoLonger", "Echo: tiempo más largo (mantener)", Hold)  \
+    X (BothThrow,  "bothThrow",  "Echo + spring: throw (mantener)", Hold)    \
+    X (SrcCh1,     "srcCh1",     "Envíos: desde canal 1",           Trigger) \
+    X (SrcCh2,     "srcCh2",     "Envíos: desde canal 2",           Trigger) \
+    X (SrcBoth,    "srcBoth",    "Envíos: desde los dos canales",   Trigger) \
+    X (IsoModeNext,"isoModeNext","Aislador: cambiar vías (3/4/5)",  Trigger) \
     X (RevThrow,   "revThrow",   "Spring: throw (mantener)",        Hold)    \
     X (RevLatchT,  "revLatchT",  "Spring: envío fijo on/off",       Trigger) \
     X (Siren1,     "siren1",     "Sirena: dos tonos",               Hold)    \
@@ -121,16 +128,24 @@ public:
     bool isFlx4MappingOn() const          { return flx4Enabled.load(); }
     void setFlx4MappingOn (bool on)       { flx4Enabled.store (on); }
     bool isTempoInverted() const          { return tempoInvert.load(); }
+    bool isNanoMappingOn() const          { return nanoEnabled.load(); }
+    void setNanoMappingOn (bool on)       { nanoEnabled.store (on); }
+    bool isNanoConnected() const          { return nanoIn.load(); }
+    int  getFlx4PadMode (int deck) const  { return flx4PadMode[deck].load(); }
     void setTempoInverted (bool inv)      { tempoInvert.store (inv); }
 
     juce::var mappingsToVar() const;
     void mappingsFromVar (const juce::var&);
 
     void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage&) override;
+    // entrada común (también la usan las pruebas, con el nombre del aparato)
+    void dispatch (const juce::String& deviceName, const juce::MidiMessage&);
 
 private:
     void timerCallback() override;
     void handleFlx4 (const juce::MidiMessage&);
+    void handleNano (const juce::MidiMessage&);
+    void confirmFlx4PadMode (int deck, int modeNote);
     bool handleLearned (const juce::MidiMessage&, int key, float value01, bool press, bool isButton);
     void applyTarget (int target, float value01, bool press, bool isButton, int src);
     void updateLeds();
@@ -154,6 +169,11 @@ private:
 
     // estado FLX4
     std::atomic<bool> flx4Enabled { true }, flx4In { false }, tempoInvert { false };
+    std::atomic<bool> nanoEnabled { true }, nanoIn { false };
+    std::atomic<int> flx4PadMode[2] { { 0x1B }, { 0x1B } };   // botón de modo activo (0x1B = HOT CUE)
+    std::atomic<bool> flx4ModeDirty { true };
+    double fxOnOffPressMs[2] { 0.0, 0.0 };
+    float nanoLast[2] { -1.0f, -1.0f };   // último valor de los ejes X / Y del nanoPAD2
     bool shift[2] { false, false };
     int msb[16][32] {};
     std::unique_ptr<juce::MidiOutput> flx4Out;

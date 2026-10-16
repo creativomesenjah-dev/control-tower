@@ -1,4 +1,6 @@
 #include "MainComponent.h"
+#include "FactorySamples.h"
+#include "GuideText.h"
 
 namespace ct
 {
@@ -25,6 +27,7 @@ MainComponent::MainComponent()
     controller.mappingsFromVar (juce::JSON::parse (settings->getValue ("midiMap")));
     controller.setFlx4MappingOn (settings->getBoolValue ("flx4Mapping", true));
     controller.setTempoInverted (settings->getBoolValue ("tempoInvert", false));
+    controller.setNanoMappingOn (settings->getBoolValue ("nanoMapping", true));
     engine.setOutputPairs (settings->getIntValue ("masterPair", 0), settings->getIntValue ("phonesPair", 1));
     lastDeviceName = settings->getValue ("lastDevice");
     {
@@ -37,6 +40,16 @@ MainComponent::MainComponent()
     {
         const juce::File f (settings->getValue ("sample" + juce::String (i)));
         if (f.existsAsFile()) engine.loadSample (i, f);
+    }
+    // la primera vez: 8 samples de dub de fábrica en las ranuras 1 a 8
+    if (! settings->getBoolValue ("factorySamples", false))
+    {
+        const auto dir = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                             .getChildFile ("Control Tower").getChildFile ("Samples de fabrica");
+        const auto files = factory::install (dir);
+        for (int i = 0; i < files.size() && i < 8; ++i)
+            if (engine.getSampleName (i).isEmpty()) engine.loadSample (i, files[i]);
+        settings->setValue ("factorySamples", true);
     }
 
     // ----- interfaz
@@ -55,7 +68,8 @@ MainComponent::MainComponent()
 
     audioButton.onClick = [this] { showAudioSettings(); };
     midiButton.onClick = [this] { showMidiMap(); };
-    for (auto* b : { &audioButton, &midiButton }) { b->setWantsKeyboardFocus (false); addAndMakeVisible (b); }
+    guideButton.onClick = [this] { showGuide(); };
+    for (auto* b : { &audioButton, &midiButton, &guideButton }) { b->setWantsKeyboardFocus (false); addAndMakeVisible (b); }
 
     for (juce::Component* c : { (juce::Component*) &deck1, (juce::Component*) &deck2, (juce::Component*) &mixer,
                                 (juce::Component*) &isolator, (juce::Component*) &echoView, (juce::Component*) &springView,
@@ -136,6 +150,7 @@ void MainComponent::saveSettings()
     s->setValue ("midiMap", juce::JSON::toString (controller.mappingsToVar(), true));
     s->setValue ("flx4Mapping", controller.isFlx4MappingOn());
     s->setValue ("tempoInvert", controller.isTempoInverted());
+    s->setValue ("nanoMapping", controller.isNanoMappingOn());
     s->setValue ("masterPair", engine.getMasterPair());
     s->setValue ("phonesPair", engine.getPhonesPair());
     s->setValue ("lastDevice", lastDeviceName);
@@ -237,6 +252,26 @@ void MainComponent::showAudioSettings()
     o.launchAsync();
 }
 
+void MainComponent::showGuide()
+{
+    auto* ed = new juce::TextEditor();
+    ed->setMultiLine (true);
+    ed->setReadOnly (true);
+    ed->setScrollbarsShown (true);
+    ed->setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain));
+    ed->setColour (juce::TextEditor::backgroundColourId, Colours::bg);
+    ed->setText (juce::String (juce::CharPointer_UTF8 (kGuideText)));
+    ed->setSize (720, 680);
+    juce::DialogWindow::LaunchOptions o;
+    o.content.setOwned (ed);
+    o.dialogTitle = u8 ("Guía de controles");
+    o.dialogBackgroundColour = Colours::bg;
+    o.componentToCentreAround = this;
+    o.useNativeTitleBar = true;
+    o.resizable = true;
+    o.launchAsync();
+}
+
 void MainComponent::showMidiMap()
 {
     juce::DialogWindow::LaunchOptions o;
@@ -263,6 +298,7 @@ void MainComponent::timerCallback()
                                         : juce::String ("sin placa de audio");
         s << u8 (" · CPU ") << juce::roundToInt (deviceManager.getCpuUsage() * 100.0) << "%";
         s << u8 (" · FLX4 ") << (controller.isFlx4Connected() ? "conectada" : "no detectada");
+        if (controller.isNanoConnected()) s << u8 (" · nanoPAD2");
         info.setText (s, juce::dontSendNotification);
         info.setColour (juce::Label::textColourId, dev == nullptr ? Colours::red : Colours::textDim);
     }
@@ -337,6 +373,7 @@ void MainComponent::resized()
     auto tl = header.removeFromLeft (190);
     title.setBounds (tl.removeFromTop (21));
     subtitle.setBounds (tl);
+    guideButton.setBounds (header.removeFromRight (70).reduced (1, 2));
     midiButton.setBounds (header.removeFromRight (110).reduced (1, 2));
     audioButton.setBounds (header.removeFromRight (130).reduced (1, 2));
     info.setBounds (header.removeFromRight (header.getWidth() / 2));

@@ -72,10 +72,11 @@ public:
     juce::File getSampleFile (int slot) const { return sampleFiles[(size_t) slot]; }
 
     // --- efectos: "mantener" desde varias fuentes
-    Hold echoThrow, revThrow, echoFreeze;
+    Hold echoThrow, revThrow, echoFreeze, echoShorter, echoLonger;
     std::array<Hold, kNumSirenPresets> sirenHold;
     void setSiren (int preset, int src, bool down);
     int  getSirenPlaying() const { return sirenPlaying.load(); }
+    bool isSirenHeld() const { for (auto& h : sirenHold) if (h.held()) return true; return false; }
     void killEcho() { echoKillReq.fetch_add (1); }
 
     // --- tempo del echo
