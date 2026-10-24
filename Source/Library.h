@@ -63,6 +63,22 @@ public:
 
     const juce::Array<juce::File>& getVisibleTracks() const { return visible; }
 
+    // orden de la lista de temas: por nombre o por fecha de modificación (los más nuevos primero)
+    bool isSortByDate() const { return sortByDate; }
+    void setSortByDate (bool byDate)
+    {
+        const auto current = getSelectedTrackFile();
+        sortByDate = byDate;
+        rebuildVisible();
+        selectedTrack = visible.isEmpty() ? -1 : juce::jmax (0, visible.indexOf (current));
+        sendChangeMessage();
+    }
+    juce::int64 getModTime (const juce::File& f) const
+    {
+        auto it = modTimes.find (f.getFullPathName());
+        return it != modTimes.end() ? it->second : 0;
+    }
+
     int  getSelectedFolder() const { return selectedFolder; }
     int  getSelectedTrack() const  { return selectedTrack; }
     bool isTrackFocus() const      { return trackFocus; }
@@ -101,6 +117,7 @@ private:
     void run() override
     {
         std::vector<Folder> result;
+        std::map<juce::String, juce::int64> times;
         Folder all;
         all.name = u8str ("TODOS LOS TEMAS");
         std::map<juce::String, size_t> byDir;
@@ -113,6 +130,7 @@ private:
             {
                 if (threadShouldExit()) return;
                 const auto f = entry.getFile();
+                times[f.getFullPathName()] = entry.getModificationTime().toMilliseconds();
                 if (! isAudioFile (f) || f.getFileName().startsWithChar ('.')) continue;
                 const auto dir = f.getParentDirectory();
                 auto it = byDir.find (dir.getFullPathName());
@@ -138,9 +156,11 @@ private:
 
         auto flag = alive;
         auto shared = std::make_shared<std::vector<Folder>> (std::move (result));
-        juce::MessageManager::callAsync ([this, flag, shared]
+        auto sharedTimes = std::make_shared<std::map<juce::String, juce::int64>> (std::move (times));
+        juce::MessageManager::callAsync ([this, flag, shared, sharedTimes]
         {
             if (! *flag) return;
+            modTimes = std::move (*sharedTimes);
             const auto previous = selectedFolder < (int) folders.size() ? folders[(size_t) selectedFolder].dir : juce::File();
             folders = std::move (*shared);
             selectedFolder = 0;
@@ -175,6 +195,9 @@ private:
         {
             visible = folders[(size_t) juce::jlimit (0, (int) folders.size() - 1, selectedFolder)].tracks;
         }
+        if (sortByDate)
+            std::stable_sort (visible.begin(), visible.end(), [this] (const juce::File& a, const juce::File& b)
+                              { return getModTime (a) > getModTime (b); });
     }
 
     juce::StringArray roots;
@@ -182,7 +205,8 @@ private:
     juce::Array<juce::File> visible;
     juce::String search;
     int selectedFolder = 0, selectedTrack = -1;
-    bool trackFocus = true, scanning = false;
+    bool trackFocus = true, scanning = false, sortByDate = false;
+    std::map<juce::String, juce::int64> modTimes;
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
 };
 

@@ -28,6 +28,7 @@ MainComponent::MainComponent()
     controller.setFlx4MappingOn (settings->getBoolValue ("flx4Mapping", true));
     controller.setTempoInverted (settings->getBoolValue ("tempoInvert", false));
     controller.setNanoMappingOn (settings->getBoolValue ("nanoMapping", true));
+    library.setSortByDate (settings->getBoolValue ("sortByDate", false));
     engine.setOutputPairs (settings->getIntValue ("masterPair", 0), settings->getIntValue ("phonesPair", 1));
     lastDeviceName = settings->getValue ("lastDevice");
     {
@@ -151,6 +152,7 @@ void MainComponent::saveSettings()
     s->setValue ("flx4Mapping", controller.isFlx4MappingOn());
     s->setValue ("tempoInvert", controller.isTempoInverted());
     s->setValue ("nanoMapping", controller.isNanoMappingOn());
+    s->setValue ("sortByDate", library.isSortByDate());
     s->setValue ("masterPair", engine.getMasterPair());
     s->setValue ("phonesPair", engine.getPhonesPair());
     s->setValue ("lastDevice", lastDeviceName);

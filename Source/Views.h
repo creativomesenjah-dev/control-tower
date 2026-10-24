@@ -795,7 +795,8 @@ public:
         search.onReturnKey = [this] { unfocusAllComponents(); };
         addAndMakeVisible (search);
 
-        for (auto* b : { &addB, &removeB, &rescanB, &load1, &load2 })
+        sortB.onClick = [this] { library.setSortByDate (! library.isSortByDate()); };
+        for (auto* b : { &addB, &removeB, &rescanB, &load1, &load2, &sortB })
         {
             b->setWantsKeyboardFocus (false);
             addAndMakeVisible (b);
@@ -835,6 +836,7 @@ public:
         load1.setBounds (top.removeFromRight (64).reduced (1));
         top.removeFromRight (8);
         rescanB.setBounds (top.removeFromRight (30).reduced (1));
+        sortB.setBounds (top.removeFromRight (110).reduced (1));
         removeB.setBounds (top.removeFromRight (64).reduced (1));
         addB.setBounds (top.removeFromRight (96).reduced (1));
         top.removeFromRight (8);
@@ -863,11 +865,16 @@ private:
         {
             const auto& fs = view.library.getFolders();
             if (! juce::isPositiveAndBelow (row, (int) fs.size())) return;
-            if (selected) { g.setColour (Colours::amberDim); g.fillRect (0, 0, w, h); }
-            g.setColour (row == 0 ? Colours::amber : Colours::text);
+            const bool focus = ! view.library.isTrackFocus() && view.library.getSearch().isEmpty();
+            if (selected)
+            {
+                g.setColour (focus ? Colours::amber : Colours::amberDim);
+                g.fillRect (0, 0, w, h);
+            }
+            g.setColour (selected && focus ? Colours::bg : (row == 0 ? Colours::amber : Colours::text));
             g.setFont (juce::FontOptions (12.0f, row == 0 ? juce::Font::bold : juce::Font::plain));
             g.drawText (fs[(size_t) row].name, 8, 0, w - 50, h, juce::Justification::centredLeft, true);
-            g.setColour (Colours::textDim);
+            g.setColour (selected && focus ? Colours::bg : Colours::textDim);
             g.drawText (juce::String (fs[(size_t) row].tracks.size()), w - 46, 0, 40, h, juce::Justification::centredRight);
         }
         void listBoxItemClicked (int row, const juce::MouseEvent&) override
@@ -887,13 +894,21 @@ private:
         {
             const auto& ts = view.library.getVisibleTracks();
             if (! juce::isPositiveAndBelow (row, ts.size())) return;
-            if (selected) { g.setColour (Colours::amberDim); g.fillRect (0, 0, w, h); }
-            g.setColour (Colours::text);
+            const bool focus = view.library.isTrackFocus() || view.library.getSearch().isNotEmpty();
+            if (selected)
+            {
+                g.setColour (focus ? Colours::amber : Colours::amberDim);
+                g.fillRect (0, 0, w, h);
+            }
+            g.setColour (selected && focus ? Colours::bg : Colours::text);
             g.setFont (juce::FontOptions (12.0f));
-            g.drawText (ts[row].getFileNameWithoutExtension(), 8, 0, w - 60, h, juce::Justification::centredLeft, true);
-            g.setColour (Colours::textDim);
-            g.setFont (juce::FontOptions (10.0f));
-            g.drawText (ts[row].getFileExtension().substring (1).toUpperCase(), w - 52, 0, 46, h, juce::Justification::centredRight);
+            g.drawText (ts[row].getFileNameWithoutExtension(), 8, 0, w - 130, h, juce::Justification::centredLeft, true);
+            g.setColour (selected && focus ? Colours::bg : Colours::textDim);
+            g.setFont (juce::FontOptions (10.5f));
+            const auto ms = view.library.getModTime (ts[row]);
+            if (ms > 0)
+                g.drawText (juce::Time (ms).formatted ("%d/%m/%y"), w - 120, 0, 66, h, juce::Justification::centredRight);
+            g.drawText (ts[row].getFileExtension().substring (1).toUpperCase(), w - 50, 0, 44, h, juce::Justification::centredRight);
         }
         void listBoxItemClicked (int row, const juce::MouseEvent&) override { view.library.setTrackFocus (true); view.library.selectTrack (row); }
         void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override
@@ -914,10 +929,13 @@ private:
     {
         folderList.updateContent();
         trackList.updateContent();
-        folderList.selectRow (library.getSelectedFolder(), true, true);
+        folderList.selectRow (library.getSelectedFolder(), false, true);
+        folderList.scrollToEnsureRowIsOnscreen (library.getSelectedFolder());
+        sortB.setButtonText (library.isSortByDate() ? u8 ("ORDEN: FECHA ↓") : u8 ("ORDEN: NOMBRE"));
+        sortB.setToggleState (library.isSortByDate(), juce::dontSendNotification);
         if (library.getSelectedTrack() >= 0)
         {
-            trackList.selectRow (library.getSelectedTrack(), true, true);
+            trackList.selectRow (library.getSelectedTrack(), false, true);
             trackList.scrollToEnsureRowIsOnscreen (library.getSelectedTrack());
         }
         else trackList.deselectAllRows();
@@ -948,7 +966,7 @@ private:
     TrackModel trackModel;
     juce::ListBox folderList, trackList;
     juce::TextEditor search;
-    juce::TextButton addB { "+ CARPETA" }, removeB { "QUITAR" }, rescanB { u8 ("↻") }, load1 { u8 ("◀ DECK 1") }, load2 { u8 ("DECK 2 ▶") };
+    juce::TextButton addB { "+ CARPETA" }, removeB { "QUITAR" }, rescanB { u8 ("↻") }, load1 { u8 ("◀ DECK 1") }, load2 { u8 ("DECK 2 ▶") }, sortB;
     juce::Label status;
     std::unique_ptr<juce::FileChooser> chooser;
 };

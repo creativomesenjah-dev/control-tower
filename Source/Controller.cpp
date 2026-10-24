@@ -562,8 +562,11 @@ void Controller::updateLeds()
         sendLed (st, 0x0B, dk.isPlaying() ? 0x7F : (loaded && blink ? 0x7F : 0));
         sendLed (st, 0x0C, loaded && ! dk.isPlaying() ? 0x7F : 0);
         sendLed (st, 0x54, p.on (d == 0 ? P::CueA : P::CueB) ? 0x7F : 0);
-        sendLed (st, 0x10, dk.isLoopActive() ? 0x7F : 0);
-        sendLed (st, 0x11, dk.isLoopActive() ? 0x7F : 0);
+        // LOOP IN / OUT encendidos con un tema cargado (como los inicializa Mixxx), titilan con el loop activo
+        const int loopLed = loaded ? (dk.isLoopActive() ? (blink ? 0x7F : 0) : 0x7F) : 0;
+        sendLed (st, 0x10, loopLed);
+        sendLed (st, 0x11, loopLed);
+        sendLed (st, 0x4D, loaded ? 0x7F : 0);
 
         // luz del botón de modo activo (así la FLX4 cambia de modo)
         const int mode = flx4PadMode[d].load();

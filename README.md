@@ -106,6 +106,9 @@ arrastrando un archivo.
 
 ## Módulos
 
+- **Biblioteca**: carpetas a la izquierda, temas a la derecha, buscador. **ORDEN** alterna entre
+  nombre y fecha de modificación (los más nuevos primero; con "TODOS LOS TEMAS" ves lo último que
+  agregaste en toda la biblioteca). La lista que mueve el BROWSE se marca en ámbar y sigue a la selección.
 - **Decks**: el tema se decodifica en segundo plano a la memoria (unos 10 MB por minuto). Los
   saltos de cue, hot cues, loops y scratch son instantáneos. Sólo se guardan en memoria los dos temas
   cargados, nunca la biblioteca entera. Arrastrá temas desde el Finder o desde la biblioteca a un deck.

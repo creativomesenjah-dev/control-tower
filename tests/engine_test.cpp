@@ -290,6 +290,20 @@ int main (int argc, char** argv)
         c.run (0.1);
         check (c.e.deck (0).isPlaying(), "nanoPAD2 escena 4: play del deck 1");
 
+        // loop manual desde la FLX4: LOOP IN, 1 s después LOOP OUT -> repite ese segundo
+        flx (0x90, 0x10, 0x7F); flx (0x90, 0x10, 0x00);
+        const double loopStart = c.e.deck (0).getPositionSeconds();
+        c.run (1.0);
+        flx (0x90, 0x11, 0x7F); flx (0x90, 0x11, 0x00);
+        c.run (2.5);
+        const double inLoop = c.e.deck (0).getPositionSeconds();
+        std::printf ("     loop FLX4: in %.2f s, después de 2,5 s más la posición es %.2f s (activo: %d)\n",
+                     loopStart, inLoop, (int) c.e.deck (0).isLoopActive());
+        check (c.e.deck (0).isLoopActive() && inLoop >= loopStart - 0.02 && inLoop <= loopStart + 1.1, "FLX4: LOOP IN / LOOP OUT hacen loop");
+        flx (0x90, 0x4D, 0x7F); flx (0x90, 0x4D, 0x00);
+        c.run (2.0);
+        check (! c.e.deck (0).isLoopActive() && c.e.deck (0).getPositionSeconds() > loopStart + 1.5, "FLX4: RELOOP/EXIT sale del loop");
+
         std::printf ("     samples de fábrica:");
         for (auto& f : files) std::printf (" %s", f.getFileNameWithoutExtension().toRawUTF8());
         std::printf ("\n");
