@@ -3,10 +3,10 @@
 //  Deck 1 ─ trim ─ EQ aislador 3 bandas ─ filtro ─┬─ fader ─ crossfader ─┐
 //  Deck 2 ─ trim ─ EQ aislador 3 bandas ─ filtro ─┤                      ├─ bus master
 //                                                 └─ CUE ─ auriculares   │
-//  envío (canal 1 / 2 / ambos, post-fader) ─┬─ TAPE ECHO ────────────────┤
+//  envío (canal 1 / 2 / ambos, post-fader) ─┬─ SPACE ECHO────────────────┤
 //                                           └─ SPRING ───────────────────┤
 //  sirena, samples, entrada en vivo ─────────────────────────────────────┘
-//  bus master ─ sub boost ─ AISLADOR 3/4/5 ─ filtro master ─ nivel ─ drive/limitador ─ salida 1-2
+//  bus master ─ sub boost ─ AISLADOR 3/4/5 ─ HP / LP master ─ nivel ─ drive/limitador ─ salida 1-2
 //  auriculares (cue / master) ─ salida 3-4 (FLX4)
 #pragma once
 
@@ -20,7 +20,7 @@
 #include "Deck.h"
 #include "Loader.h"
 #include "Sampler.h"
-#include "TapeEchoDSP.h"
+#include "SpaceEchoDSP.h"
 #include "SirenDSP.h"
 
 namespace ct
@@ -140,10 +140,10 @@ private:
     std::array<Ramp, 2> trimRamp, faderRamp;
     Isolator masterIso;
     SubBoost subBoost;
-    DjFilter masterFilter;
+    HpLpFilter masterFilter;
     MasterDynamics dynamics;
     Ramp masterLevelRamp, modeFade, echoSendRamp, revSendRamp, echoRetRamp, revToRamp, sirenRamp, sampRamp, inRamp, headRamp;
-    TapeEcho echo;
+    SpaceEcho echo;
     SpringReverb spring;
     Siren siren;
     int isoModeActive = 1, isoModePending = -1;

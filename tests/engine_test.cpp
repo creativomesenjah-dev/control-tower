@@ -78,6 +78,7 @@ struct Rig
     FakeDevice dev;
     juce::AudioBuffer<float> out { 4, 512 }, in { 2, 512 };
     std::vector<float> rec[4];
+    int nonFinite = 0;
 
     Rig() { e.audioDeviceAboutToStart (&dev); }
 
@@ -91,6 +92,9 @@ struct Rig
             float* outs[4] = { out.getWritePointer (0), out.getWritePointer (1), out.getWritePointer (2), out.getWritePointer (3) };
             e.audioDeviceIOCallbackWithContext (ins, 2, outs, 4, 512, {});
             if (keep) for (int c = 0; c < 4; ++c) rec[c].insert (rec[c].end(), outs[c], outs[c] + 512);
+            for (int c = 0; c < 2; ++c)
+                for (int i = 0; i < 512; ++i)
+                    if (! std::isfinite (outs[c][i])) { ++nonFinite; break; }
         }
     }
 
@@ -252,6 +256,11 @@ int main (int argc, char** argv)
         q.set (P::IsoMode, 1.0f);
         flx (0x97, 0x27, 0x7F); flx (0x97, 0x27, 0x00);
         check (q.choice (P::IsoMode) == 2, "FLX4 BEAT JUMP pad 8: cambia las vías del aislador");
+        flx (0x98, 0x55, 0x7F); flx (0x98, 0x55, 0x00);   // SHIFT + pad 6 en PAD FX2 -> modo 1+3
+        check (q.choice (P::EchoHead) == 5, "FLX4 PAD FX2 pad 6: cabezales 1+3");
+        flx (0x97, 0x57, 0x7F); flx (0x97, 0x57, 0x00);   // pad 8 -> siguiente modo
+        check (q.choice (P::EchoHead) == 6, "FLX4 PAD FX2 pad 8: siguiente modo de cabezales");
+        q.set (P::EchoHead, 0.0f);
         flx (0x97, 0x20, 0x7F); flx (0x97, 0x20, 0x00);
         check (q.on (P::Kill1), "FLX4 BEAT JUMP pad 1: kill de la banda 1");
 
@@ -332,8 +341,8 @@ int main (int argc, char** argv)
         d.e.setSiren (0, Hold::Mouse, true); seg (1.5); d.e.setSiren (0, Hold::Mouse, false); seg (1.7);
         d.e.setSiren (1, Hold::Mouse, true); seg (1.2); d.e.setSiren (1, Hold::Mouse, false); seg (2.0);
         // filtro master: barrido pasa-altos y vuelta
-        for (int k = 0; k <= 40; ++k) { q.set (P::MFilter, 0.5f + 0.4f * (float) k / 40.0f); seg (0.05); }
-        for (int k = 40; k >= 0; --k) { q.set (P::MFilter, 0.5f + 0.4f * (float) k / 40.0f); seg (0.05); }
+        for (int k = 0; k <= 40; ++k) { q.set (P::MHp, 20.0f + 1500.0f * (float) k / 40.0f); seg (0.05); }
+        for (int k = 40; k >= 0; --k) { q.set (P::MHp, 20.0f + 1500.0f * (float) k / 40.0f); seg (0.05); }
         // final: fader cerrado con throw y freeze
         d.e.echoThrow.set (Hold::Mouse, true); seg (0.4); d.e.echoThrow.set (Hold::Mouse, false);
         q.set (P::FaderA, 0.0f); d.e.echoFreeze.set (Hold::Mouse, true); seg (2.5); d.e.echoFreeze.set (Hold::Mouse, false);
@@ -349,6 +358,62 @@ int main (int argc, char** argv)
         auto w = wav.createWriterFor (os, juce::AudioFormatWriterOptions().withSampleRate (44100).withNumChannels (2).withBitsPerSample (16));
         w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples());
         std::printf ("     demo: %s (%.1f s)\n", f.getFullPathName().toRawUTF8(), b.getNumSamples() / 44100.0);
+    }
+
+
+    // ---------------- demo de efectos: cada efecto solo, para comparar
+    {
+        Rig d;
+        auto& q = d.e.params;
+        d.e.loadTrack (0, loopFile, err);
+        for (int i = 0; i < 400 && ! d.e.getTrack (0)->finished.load(); ++i) juce::Thread::sleep (10);
+        d.e.selectEchoDivision (2);     // 1/8 con puntillo
+        q.set (P::EchoFb, 55.0f); q.set (P::RevRet, -4.0f); q.set (P::EchoToRev, 0.0f);
+        d.e.deck (0).pushCommand ({ DeckCmd::PlayToggle });
+        auto seg = [&] (double s) { d.run (s, true); };
+        auto throwEcho = [&] (double hold, double tail) { d.e.echoThrow.set (Hold::Mouse, true); seg (hold); d.e.echoThrow.set (Hold::Mouse, false); seg (tail); };
+        seg (3.2);
+        // 1) space echo: los cabezales
+        for (int m : { 0, 3, 5, 6 }) { q.set (P::EchoHead, (float) m); throwEcho (0.8, 3.2); }
+        // 2) intensidad alta y cambio de velocidad de cinta (el pitch se dobla)
+        q.set (P::EchoHead, 3.0f); q.set (P::EchoFb, 92.0f);
+        throwEcho (0.8, 1.6);
+        q.set (P::FaderA, 0.0f);
+        q.set (P::EchoTime, 260.0f); seg (1.6); q.set (P::EchoTime, 520.0f); seg (1.6);
+        d.e.killEcho(); seg (0.3);
+        q.set (P::FaderA, 1.0f); q.set (P::EchoFb, 55.0f); d.e.selectEchoDivision (2); q.set (P::EchoHead, 0.0f);
+        seg (1.6);
+        // 3) spring
+        d.e.revThrow.set (Hold::Mouse, true); seg (0.8); d.e.revThrow.set (Hold::Mouse, false); seg (2.4);
+        d.e.revThrow.set (Hold::Mouse, true); seg (0.8); d.e.revThrow.set (Hold::Mouse, false);
+        q.set (P::FaderA, 0.0f); seg (3.0);           // la cola del resorte sola
+        q.set (P::FaderA, 1.0f);
+        // 4) sirenas, al echo
+        for (int s = 0; s < 4; ++s) { d.e.setSiren (s, Hold::Mouse, true); seg (1.2); d.e.setSiren (s, Hold::Mouse, false); seg (1.6); }
+        // 5) filtros master: LP barrido con resonancia, después HP
+        q.set (P::MRes, 0.7f);
+        for (int k = 0; k <= 50; ++k) { q.set (P::MLp, 20000.0f * std::pow (150.0f / 20000.0f, (float) k / 50.0f)); seg (0.05); }
+        for (int k = 50; k >= 0; --k) { q.set (P::MLp, 20000.0f * std::pow (150.0f / 20000.0f, (float) k / 50.0f)); seg (0.03); }
+        q.set (P::MLp, 20000.0f);
+        for (int k = 0; k <= 50; ++k) { q.set (P::MHp, 20.0f * std::pow (100.0f, (float) k / 50.0f)); seg (0.05); }
+        for (int k = 50; k >= 0; --k) { q.set (P::MHp, 20.0f * std::pow (100.0f, (float) k / 50.0f)); seg (0.03); }
+        q.set (P::MHp, 20.0f);
+        seg (1.0);
+
+        juce::AudioBuffer<float> b (2, (int) d.rec[0].size());
+        b.copyFrom (0, 0, d.rec[0].data(), b.getNumSamples());
+        b.copyFrom (1, 0, d.rec[1].data(), b.getNumSamples());
+        const auto f = dir.getChildFile ("efectos_demo.wav");
+        f.deleteFile();
+        std::unique_ptr<juce::OutputStream> os (f.createOutputStream());
+        juce::WavAudioFormat wav;
+        auto w = wav.createWriterFor (os, juce::AudioFormatWriterOptions().withSampleRate (44100).withNumChannels (2).withBitsPerSample (16));
+        w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples());
+        float pk = 0; for (int ch = 0; ch < 2; ++ch) pk = juce::jmax (pk, b.getMagnitude (ch, 0, b.getNumSamples()));
+        std::printf ("     demo de efectos: %s (%.1f s, pico %.2f)\n", f.getFullPathName().toRawUTF8(), b.getNumSamples() / 44100.0, pk);
+        std::printf ("     bloques con valores no finitos: %d\n", d.nonFinite);
+        check (d.nonFinite == 0, "demo de efectos: nunca hay NaN / inf");
+        check (pk > 0.1f && pk <= 1.0f, "demo de efectos sin saturar la salida");
     }
 
     std::printf ("\n%s (%d fallas)\n", failures == 0 ? "TODO OK" : "HAY FALLAS", failures);

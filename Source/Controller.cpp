@@ -77,6 +77,7 @@ void Controller::perform (A a, int src, bool down)
         case A::SrcCh2:  if (down) p.set (P::EchoSrc, 1.0f); return;
         case A::SrcBoth: if (down) p.set (P::EchoSrc, 2.0f); return;
         case A::IsoModeNext: if (down) p.set (P::IsoMode, (float) ((p.choice (P::IsoMode) + 1) % 3)); return;
+        case A::EchoHeadNext: if (down) p.set (P::EchoHead, (float) ((p.choice (P::EchoHead) + 1) % kNumHeadModes)); return;
         case A::EchoKill:
             if (down)
             {
@@ -404,6 +405,11 @@ void Controller::handleFlx4 (const juce::MidiMessage& m)
             else if (i == 6) perform (A::SubBoostT, src, true);
             else perform (A::IsoModeNext, src, true);
         }
+        else if (group == 0x50)     // PAD FX2 -> CABEZALES DEL ECHO (1, 2, 3, 1+2, 2+3, 1+3, 1+2+3) · 8 siguiente
+        {
+            if (! press) return;
+            if (i < kNumHeadModes) p.set (P::EchoHead, (float) i); else perform (A::EchoHeadNext, src, true);
+        }
         else if (group == 0x60)     // BEAT LOOP -> TIEMPO DEL ECHO
         {
             if (! press) return;
@@ -606,6 +612,7 @@ void Controller::updateLeds()
             else if (i == 7) iso = p.choice (P::IsoMode) == 2 ? 0x7F : 0;
             sendLed (ps, 0x20 + i, iso);
 
+            sendLed (ps, 0x50 + i, (i < kNumHeadModes && p.choice (P::EchoHead) == i) ? 0x7F : 0);
             sendLed (ps, 0x60 + i, (i < 7 && engine.getEchoDivision() == i && engine.echoTimeIsSynced()) ? 0x7F : 0);
 
             const int slot = d * 8 + i;

@@ -329,6 +329,7 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     if (c >= '1' && c <= '7') { engine.selectEchoDivision ((int) (c - '1')); return true; }
     if (c == 't') { engine.tap(); return true; }
     if (c == 'k') { engine.killEcho(); return true; }
+    if (c == 'h') { controller.perform (A::EchoHeadNext, Hold::Keyboard, true); return true; }
     if (c == 'q') { controller.perform (A::Play1, Hold::Keyboard, true); return true; }
     if (c == 'p') { controller.perform (A::Play2, Hold::Keyboard, true); return true; }
     if (c == '[') { loadSelectedInto (0); return true; }

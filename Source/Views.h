@@ -448,12 +448,14 @@ private:
 class EchoView : public Panel, public Refreshable
 {
 public:
-    EchoView (Engine& e, Controller& c) : Panel ("TAPE ECHO", Colours::amber), engine (e)
+    EchoView (Engine& e, Controller& c) : Panel ("SPACE ECHO", Colours::amber), engine (e)
     {
         auto& p = e.params;
         auto knob = [&] (P param, const char* name) { auto* k = knobs.add (new ParamKnob (p, param, u8 (name))); addAndMakeVisible (k); };
+        knob (P::EchoHead, "CABEZALES");
         knob (P::EchoTime, "TIEMPO");
-        knob (P::EchoFb, "REPETIC.");
+        knob (P::EchoFb, "INTENSIDAD");
+        knob (P::EchoTone, "TONO");
         knob (P::EchoSend, "NIV. ENVÍO");
         knob (P::EchoRet, "RETORNO");
         knob (P::EchoIner, "INERCIA");
@@ -527,13 +529,13 @@ public:
         auto srcRow = r.removeFromBottom (20);
         const int sw = srcRow.getWidth() / 3;
         for (auto* b : sources) b->setBounds (srcRow.removeFromLeft (sw).reduced (1));
-        // 9 perillas: 5 + 4
+        // 11 perillas: 6 + 5
         const int kh = r.getHeight() / 2;
         auto row1 = r.removeFromTop (kh), row2 = r;
-        const int kw = row1.getWidth() / 5;
-        for (int i = 0; i < 5; ++i) knobs[i]->setBounds (row1.removeFromLeft (kw));
+        const int kw = row1.getWidth() / 6;
+        for (int i = 0; i < 6; ++i) knobs[i]->setBounds (row1.removeFromLeft (kw));
         row2.removeFromLeft (kw / 2);
-        for (int i = 5; i < 9; ++i) knobs[i]->setBounds (row2.removeFromLeft (kw));
+        for (int i = 6; i < knobs.size(); ++i) knobs[i]->setBounds (row2.removeFromLeft (kw));
     }
 
 private:
@@ -558,7 +560,7 @@ public:
         knob (P::RevSend, "NIV. ENVÍO");
         knob (P::RevRet, "RETORNO");
         knob (P::EchoToRev, "DEL ECHO");
-        knob (P::RevSize, "CUERPO");
+        knob (P::RevSize, "TENSIÓN");
         knob (P::RevDecay, "COLA");
         knob (P::RevTone, "TONO");
         throwB = std::make_unique<ActionButton> (c, A::RevThrow, "THROW", Colours::teal);
@@ -639,7 +641,8 @@ public:
     {
         auto& p = e.params;
         auto knob = [&] (P param, const char* name, juce::Colour c = Colours::text) { auto* k = knobs.add (new ParamKnob (p, param, u8 (name), c)); addAndMakeVisible (k); };
-        knob (P::MFilter, "FILTRO");
+        knob (P::MHp, "HP");
+        knob (P::MLp, "LP");
         knob (P::MRes, "RESON.");
         knob (P::Drive, "DRIVE", Colours::red);
         knob (P::MLevel, "NIVEL");
@@ -684,9 +687,10 @@ public:
         meterL.setBounds (m.removeFromLeft (m.getWidth() / 2).reduced (2, 0));
         meterR.setBounds (m.reduced (2, 0));
         r.removeFromBottom (2);
-        const int kw = r.getWidth() / 2, kh = r.getHeight() / 3;
+        // 7 perillas: HP · LP · RESON. / DRIVE · NIVEL / AURIC. MIX · AURIC. NIV
+        const int cols = 3, kw = r.getWidth() / cols, kh = r.getHeight() / 3;
         for (int i = 0; i < knobs.size(); ++i)
-            knobs[i]->setBounds (r.getX() + (i % 2) * kw, r.getY() + (i / 2) * kh, kw, kh);
+            knobs[i]->setBounds (r.getX() + (i % cols) * kw, r.getY() + (i / cols) * kh, kw, kh);
     }
 
 private:

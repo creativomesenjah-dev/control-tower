@@ -22,8 +22,8 @@ TRIM HI MID LOW ..... EQ aislador del canal (al mínimo = kill)
 CFX ................. filtro del canal
 CUE de canal ........ pre-escucha · HEADPHONES MIX: cue / master
 
-SECCIÓN BEAT FX = TAPE ECHO
-  LEVEL/DEPTH ....... repeticiones
+SECCIÓN BEAT FX = SPACE ECHO (3 cabezales)
+  LEVEL/DEPTH ....... intensidad (cerca del 90-100 % autooscila)
   ON/OFF ............ tocar: envío fijo al echo · mantener: THROW
   SHIFT + ON/OFF .... lo mismo para el SPRING
   SELECT ............ kill del echo
@@ -41,11 +41,12 @@ PADS (el modo se cambia con los botones de modo, como siempre)
   KEYBOARD (SHIFT) .. 1 dos tonos · 2 láser · 3 ondulante · 4 caída · 5 sub drop
                       6 throw echo · 7 throw spring · 8 freeze
   BEAT LOOP (SHIFT) . tiempo del echo: 1/16 1/8 1/8· 1/4 1/4· 1/2 1/4T · 8 TAP
-  PAD FX2 / KEY SHIFT  libres: asignalos en MAPEO MIDI
+  PAD FX2 (SHIFT) ... CABEZALES del echo: 1 · 2 · 3 · 1+2 · 2+3 · 1+3 · 1+2+3 · 8 siguiente
+  KEY SHIFT ......... libre: asignalo en MAPEO MIDI
 
 KORG nanoPAD2 (cambiá de escena con el botón SCENE)
 ────────────────────────────────────────────────────────────
-PAD XY .............. X = tiempo del echo · Y = repeticiones
+PAD XY .............. X = tiempo del echo · Y = intensidad
                       con una sirena sonando: X = tono · Y = velocidad
                       al soltar el dedo, los valores quedan donde estaban
 
@@ -76,6 +77,7 @@ Z X C V B (mantener) ... sirenas 1 a 5
 E / R (mantener) ....... throw al echo / al spring
 F (mantener) ........... freeze del echo
 K / T .................. kill del echo / tap tempo
+H ...................... siguiente modo de cabezales del echo
 1 a 7 .................. divisiones del echo
 Q / P .................. play deck 1 / deck 2
 flechas ................ biblioteca · [ ] cargar en deck 1 / 2

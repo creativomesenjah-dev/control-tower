@@ -375,21 +375,20 @@ void Engine::processChunk (const float* const* in, int numIn, float* const* out,
         const int ramp = (echoLonger.held() ? 1 : 0) - (echoShorter.held() ? 1 : 0);
         if (ramp != 0) p.setNorm (P::EchoTime, p.getNorm (P::EchoTime) + (float) ramp * 0.3f * (float) n / sr);
 
-        TapeEchoParams ep;
+        SpaceEchoParams ep;
         ep.timeMs     = p.get (P::EchoTime);
-        ep.feedback   = p.get (P::EchoFb) * 0.01f;
+        ep.heads      = headModeMask (p.choice (P::EchoHead));
+        ep.tone       = p.get (P::EchoTone);
+        ep.intensity  = p.get (P::EchoFb) * 0.01f;
         ep.inertiaSec = p.get (P::EchoIner);
         ep.wowFlutter = p.get (P::EchoWow) * 0.01f;
         ep.drive      = p.get (P::EchoSat) * 0.01f;
         ep.lowCutHz   = p.get (P::EchoLow);
         ep.highCutHz  = p.get (P::EchoHigh);
-        ep.inputGain  = 1.0f;
         ep.outputGain = 1.0f;
-        ep.sendOpen   = true;
-        ep.throwHeld  = false;
         ep.freeze     = echoFreeze.held();
         echo.setParams (ep);
-        echo.process (echoIn.data(), nullptr, echoOut.data(), nullptr, n);
+        echo.process (echoIn.data(), echoOut.data(), n);
         echoGlideMs.store (echo.getCurrentDelayMs());
 
         const float ret = p.get (P::EchoRet) <= -39.9f ? 0.0f : dbToGain (p.get (P::EchoRet));
@@ -436,7 +435,7 @@ void Engine::processChunk (const float* const* in, int numIn, float* const* out,
         }
         masterIso.process (mixL.data(), mixR.data(), n);
 
-        masterFilter.setPosition (p.get (P::MFilter), p.get (P::MRes));
+        masterFilter.setParams (p.get (P::MHp), p.get (P::MLp), p.get (P::MRes));
         masterFilter.process (mixL.data(), mixR.data(), n);
 
         const float lvl = (p.get (P::MLevel) <= -39.9f ? 0.0f : dbToGain (p.get (P::MLevel)));

@@ -1,8 +1,10 @@
 // Dsp.h — bloques de DSP del preamp, sin dependencias de JUCE (se prueban offline).
 //   SVF2        filtro de estado variable TPT (LP / BP / HP / allpass), estable al modular
 //   Isolator    aislador de 2 a 5 bandas con crossovers Linkwitz-Riley 4º orden (suma plana)
+//   Analog24    filtro analógico 24 dB con resonancia y saturación (núcleo del CFX y del master)
 //   DjFilter    filtro de un solo pote: izquierda pasa-bajos, derecha pasa-altos (CFX)
-//   SpringReverb  reverb de resortes: cadena de allpass dispersivos dentro de un loop
+//   HpLpFilter  pasa-altos + pasa-bajos del master
+//   SpringReverb  resortes físicos: allpass estirados dispersivos dentro de 3 loops
 //   MasterDynamics  drive + limitador de pico
 #pragma once
 
@@ -181,7 +183,42 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Filtro DJ de un pote (como el CFX de la FLX4): 0..0.5 pasa-bajos, 0.5..1 pasa-altos.
+// tanh rápida (racional, error < 0,3 % hasta |x| = 3, satura suave después)
+inline float fastTanh (float x)
+{
+    x = std::clamp (x, -3.0f, 3.0f);
+    const float x2 = x * x;
+    return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+}
+
+// Filtro analógico de 24 dB/oct (dos etapas de estado variable en cascada) con saturación:
+// el integrador de la etapa resonante se limita suave, así la resonancia "canta" sin pitidos
+// digitales y se comprime con nivel alto, como un filtro a transistores. Con señal normal es limpio.
+struct Analog24
+{
+    SVF2 s1, s2;
+    bool highpassMode = false;
+
+    void reset() { s1.reset(); s2.reset(); }
+    void set (float hz, float sr, float res01, bool hp)
+    {
+        highpassMode = hp;
+        s1.set (hz, sr, 0.54f);
+        s2.set (hz, sr, 0.62f + 7.0f * res01 * res01);   // Q hasta ~7.6
+    }
+    inline float tick (float x)
+    {
+        float l, b, h;
+        s1.tick (x, l, b, h);
+        const float y1 = highpassMode ? h : l;
+        s2.tick (y1, l, b, h);
+        s2.ic1 = 2.5f * fastTanh (s2.ic1 * 0.4f);           // el "capacitor" de la etapa resonante satura
+        return highpassMode ? h : l;
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Filtro DJ de un pote (como el CFX de la FLX4): 0..0.5 pasa-bajos, 0.5..1 pasa-altos. 24 dB, analógico.
 class DjFilter
 {
 public:
@@ -190,43 +227,39 @@ public:
     void setPosition (float pos01, float resonance01)
     {
         pos = std::clamp (pos01, 0.0f, 1.0f);
-        q = 0.707f + 4.5f * std::clamp (resonance01, 0.0f, 1.0f);
+        res = std::clamp (resonance01, 0.0f, 1.0f);
     }
 
     void process (float* L, float* R, int n)
     {
         const float d = pos - 0.5f;
         const bool active = std::abs (d) > 0.02f;
-        // mezcla suave al entrar / salir de la zona muerta
         const float wetTarget = active ? 1.0f : 0.0f;
         if (! active && wet <= 0.0f) return;
 
         float hz;
-        if (d < 0.0f) { lowpassMode = true;  hz = 20000.0f * std::pow (60.0f / 20000.0f, std::min (1.0f, (-d - 0.02f) / 0.48f)); }
-        else if (d > 0.0f) { lowpassMode = false; hz = 20.0f * std::pow (9000.0f / 20.0f, std::min (1.0f, (d - 0.02f) / 0.48f)); }
+        if (d < 0.0f) { lowpassMode = true;  hz = 20000.0f * std::pow (70.0f / 20000.0f, std::min (1.0f, (-d - 0.02f) / 0.48f)); }
+        else if (d > 0.0f) { lowpassMode = false; hz = 20.0f * std::pow (8000.0f / 20.0f, std::min (1.0f, (d - 0.02f) / 0.48f)); }
         else hz = lowpassMode ? 20000.0f : 20.0f;
 
-        // cutoff suavizado (log) para barridos sin escalones
         if (curHz <= 0.0f) curHz = hz;
         const float startHz = curHz;
         curHz = hz;
-        const int chunks = (n + 31) / 32;
+        const int chunks = (n + 15) / 16;
         float* ch[2] = { L, R };
         const float wStart = wet, wStep = (wetTarget - wet) / (float) n;
         for (int c = 0; c < chunks; ++c)
         {
-            const int a = c * 32, b = std::min (n, a + 32);
+            const int a = c * 16, b = std::min (n, a + 16);
             const float t = (float) (c + 1) / (float) chunks;
             const float h = startHz * std::pow (hz / startHz, t);
-            for (int k = 0; k < 2; ++k) f2[(size_t) k].set (h, sr, q);
+            for (int k = 0; k < 2; ++k) f2[(size_t) k].set (h, sr, res, ! lowpassMode);
             for (int k = 0; k < 2; ++k)
             {
                 if (ch[k] == nullptr) continue;
                 for (int i = a; i < b; ++i)
                 {
-                    float lp, bp, hp;
-                    f2[(size_t) k].tick (ch[k][i], lp, bp, hp);
-                    const float y = lowpassMode ? lp : hp;
+                    const float y = f2[(size_t) k].tick (ch[k][i]);
                     const float w = wStart + wStep * (float) i;
                     ch[k][i] += w * (y - ch[k][i]);
                 }
@@ -237,36 +270,120 @@ public:
     }
 
 private:
-    float sr = 48000.0f, pos = 0.5f, q = 1.0f, wet = 0.0f, curHz = -1.0f;
+    float sr = 48000.0f, pos = 0.5f, res = 0.35f, wet = 0.0f, curHz = -1.0f;
     bool lowpassMode = true;
-    std::array<SVF2, 2> f2;
+    std::array<Analog24, 2> f2;
 };
 
 // ---------------------------------------------------------------------------
-// Reverb de resortes. Cada "resorte" es un loop: retardo modulado -> 8 allpass de 1er orden
-// en cascada (la dispersión que da el "boing" metálico) -> amortiguación -> realimentación.
+// Master: pasa-altos y pasa-bajos separados (24 dB, analógicos, con resonancia), como en un mixer de dub.
+// HP en 20 Hz y LP en 20 kHz = fuera del camino (bypass sin costo).
+class HpLpFilter
+{
+public:
+    void prepare (float sampleRate) { sr = sampleRate; for (auto& f : hp) f.reset(); for (auto& f : lp) f.reset(); hpCur = 20.0f; lpCur = 20000.0f; }
+
+    void setParams (float hpHz, float lpHz, float res01)
+    {
+        hpHz_ = std::clamp (hpHz, 20.0f, 4000.0f);
+        lpHz_ = std::clamp (lpHz, 100.0f, 20000.0f);
+        res = std::clamp (res01, 0.0f, 1.0f);
+    }
+
+    void process (float* L, float* R, int n)
+    {
+        process (hp, hpCur, hpHz_, hpOn, true,  L, R, n);
+        process (lp, lpCur, lpHz_, lpOn, false, L, R, n);
+    }
+
+private:
+    void process (std::array<Analog24, 2>& f, float& cur, float target, float& wet, bool isHp, float* L, float* R, int n)
+    {
+        const bool active = isHp ? target > 21.0f : target < 19800.0f;
+        const float wetTarget = active ? 1.0f : 0.0f;
+        if (! active && wet <= 0.0f) { cur = target; return; }
+        const float startHz = cur;
+        const int chunks = (n + 15) / 16;
+        const float wStart = wet, wStep = (wetTarget - wet) / (float) n;
+        float* ch[2] = { L, R };
+        for (int c = 0; c < chunks; ++c)
+        {
+            const int a = c * 16, b = std::min (n, a + 16);
+            const float t = (float) (c + 1) / (float) chunks;
+            const float h = startHz * std::pow (target / startHz, t);
+            for (int k = 0; k < 2; ++k) f[(size_t) k].set (h, sr, res, isHp);
+            for (int k = 0; k < 2; ++k)
+                for (int i = a; i < b; ++i)
+                {
+                    const float y = f[(size_t) k].tick (ch[k][i]);
+                    ch[k][i] += (wStart + wStep * (float) i) * (y - ch[k][i]);
+                }
+        }
+        cur = target;
+        wet = wetTarget;
+        if (wet <= 0.0f) for (auto& x : f) x.reset();
+    }
+
+    float sr = 48000.0f, hpHz_ = 20.0f, lpHz_ = 20000.0f, res = 0.3f;
+    float hpCur = 20.0f, lpCur = 20000.0f, hpOn = 0.0f, lpOn = 0.0f;
+    std::array<Analog24, 2> hp, lp;
+};
+
+// ---------------------------------------------------------------------------
+// Reverb de resortes física (modelo paramétrico tipo Välimäki / Parker / Abel).
+// Cada resorte es un loop: entrada + realimentación -> 60 allpass "estirados" (a + z^-K)/(1 + a·z^-K)
+// -> pasa-bajos -> retardo (ida y vuelta por el resorte, con micro-modulación) -> realimentación.
+// Por debajo de la frecuencia de transición (~4 kHz) los allpass estirados retrasan más los agudos
+// que los graves (así viajan las ondas en un resorte helicoidal): cada vuelta llega como un "chirp", y como la dispersión está dentro del loop cada repetición es más "boing" que la anterior.
+// Tres resortes de distinto largo dan el estéreo (como los tanques de 3 resortes).
 class SpringReverb
 {
 public:
+    static constexpr int kSprings = 3;
+    static constexpr int kStages  = 60;
+    static constexpr int kMaxK    = 16;
+
     void prepare (float sampleRate)
     {
         sr = sampleRate;
-        for (auto& t : tanks) { t.buf.assign ((size_t) (0.12f * sr) + 8, 0.0f); t.w = 0; t.state = 0.0f; t.ap.fill ({}); t.damp = 0.0f; }
-        inHp.reset(); inLp.reset(); outHp[0].reset(); outHp[1].reset();
-        inHp.set (180.0f, sr); inLp.set (5200.0f, sr);
-        outHp[0].set (150.0f, sr); outHp[1].set (150.0f, sr);
+        // K: la zona dispersiva queda por debajo de ~4 kHz (fs / 2K), como en un resorte real
+        K = std::clamp ((int) std::lround (sr / (2.0f * 4000.0f)), 1, kMaxK);
+        for (auto& s : springs)
+        {
+            s.buf.assign ((size_t) (0.16f * sr) + 8, 0.0f);
+            s.w = 0;
+            for (auto& st : s.xs) st.fill (0.0f);
+            for (auto& st : s.ys) st.fill (0.0f);
+            s.idx = 0;
+            s.lp.reset(); s.fbHp.reset();
+            s.fbHp.set (60.0f, sr, 0.6f);
+            s.modState = s.modTarget = 0.0f; s.modCount = 0;
+        }
+        inHp.reset(); inLp.reset(); outHp[0].reset(); outHp[1].reset(); body[0].reset(); body[1].reset();
+        inHp.set (120.0f, sr, 0.6f); inLp.set (6000.0f, sr, 0.6f);
+        outHp[0].set (90.0f, sr); outHp[1].set (90.0f, sr);
         setParams (0.5f, 0.5f, 0.5f);
     }
 
-    // size: largo de los resortes; decay: cola; tone: brillo
+    // size: largo / tensión de los resortes; decay: cola; tone: brillo
     void setParams (float size01, float decay01, float tone01)
     {
-        const float base = 0.028f + 0.045f * std::clamp (size01, 0.0f, 1.0f);
-        tanks[0].lenSmp = base * sr;
-        tanks[1].lenSmp = base * 1.37f * sr;
-        fb = 0.55f + 0.38f * std::clamp (decay01, 0.0f, 1.0f);
-        apCoef = 0.62f + 0.12f * std::clamp (size01, 0.0f, 1.0f);
-        dampCoef = std::exp (-2.0f * kPi * (1500.0f + 6000.0f * std::clamp (tone01, 0.0f, 1.0f)) / sr);
+        size01 = std::clamp (size01, 0.0f, 1.0f);
+        decay01 = std::clamp (decay01, 0.0f, 1.0f);
+        tone01 = std::clamp (tone01, 0.0f, 1.0f);
+        static const float ratio[kSprings] = { 1.0f, 1.173f, 1.341f };
+        const float base = (0.026f + 0.030f * size01) * sr;
+        const float rt60 = 0.7f + 4.3f * decay01 * decay01 + 0.6f * decay01;   // 0,7 .. 5,6 s
+        for (int i = 0; i < kSprings; ++i)
+        {
+            auto& s = springs[(size_t) i];
+            s.len = base * ratio[i];
+            s.g = std::pow (10.0f, -3.0f * (s.len / sr) / rt60);
+            s.lp.set (2400.0f + 4200.0f * tone01, sr, 0.6f);
+        }
+        a = 0.62f + 0.16f * size01;          // más tensión = chirp más marcado
+        for (auto& b : body) b.set (650.0f + 900.0f * tone01, sr, 0.9f);
+        bodyGain = 0.35f;
     }
 
     // in: mono. Suma la reverb (estéreo) en outL/outR con ganancia gain.
@@ -274,52 +391,74 @@ public:
     {
         for (int i = 0; i < n; ++i)
         {
+            // el transductor de entrada: sin graves, satura un poco con golpes fuertes (el "crash" del tanque)
             float x = inLp.lowpass (inHp.highpass (in[i]));
-            modPhase += 0.6f / sr; if (modPhase >= 1.0f) modPhase -= 1.0f;
-            const float mod = std::sin (2.0f * kPi * modPhase);
-            float o[2];
-            for (int t = 0; t < 2; ++t)
+            x = fastTanh (1.4f * x) * 0.7f;
+
+            float o[kSprings];
+            for (int si = 0; si < kSprings; ++si)
             {
-                auto& tk = tanks[(size_t) t];
-                // lectura del retardo (lineal, modulación leve)
-                const float d = tk.lenSmp * (1.0f + 0.004f * (t == 0 ? mod : -mod));
-                const size_t size = tk.buf.size();
-                float rp = (float) tk.w - d;
-                while (rp < 0.0f) rp += (float) size;
+                auto& s = springs[(size_t) si];
+                // micro-modulación aleatoria del largo (el resorte nunca está quieto)
+                if (--s.modCount <= 0) { s.modCount = (int) (sr * 0.15f); s.modTarget = rnd(); }
+                s.modState += (s.modTarget - s.modState) * (3.0f / sr);
+                const float d = s.len * (1.0f + 0.0016f * s.modState);
+                const size_t size = s.buf.size();
+                float rp = (float) s.w - d;
+                if (rp < 0.0f) rp += (float) size;
                 const size_t i0 = (size_t) rp % size, i1 = (i0 + 1) % size;
                 const float fr = rp - std::floor (rp);
-                float y = tk.buf[i0] + fr * (tk.buf[i1] - tk.buf[i0]);
-                // dispersión
-                for (auto& s : tk.ap)
+                const float back = s.buf[i0] + fr * (s.buf[i1] - s.buf[i0]);
+
+                float u = x + s.g * s.fbHp.highpass (back);
+                // dispersión: cascada de allpass estirados, un índice circular común
+                const int r = s.idx;
+                for (int k = 0; k < kStages; ++k)
                 {
-                    const float v = -apCoef * y + s;
-                    s = y + apCoef * v;
-                    y = v;
+                    const float xd = s.xs[(size_t) k][(size_t) r], yd = s.ys[(size_t) k][(size_t) r];
+                    const float y = a * u + xd - a * yd;
+                    s.xs[(size_t) k][(size_t) r] = u;
+                    s.ys[(size_t) k][(size_t) r] = y;
+                    u = y;
                 }
-                // amortiguación
-                tk.damp = y + dampCoef * (tk.damp - y);
-                y = tk.damp;
-                tk.buf[tk.w] = std::tanh (x + fb * y);
-                tk.w = (tk.w + 1) % size;
-                o[t] = y;
+                s.idx = (r + 1) % K;
+                u = s.lp.lowpass (u);
+                s.buf[s.w] = fastTanh (u);
+                s.w = (s.w + 1) % size;
+                o[si] = u;
             }
-            outL[i] += gain * outHp[0].highpass (o[0]);
-            outR[i] += gain * outHp[1].highpass (o[1]);
+
+            float l = 1.1f * (o[0] + 0.6f * o[2]);
+            float rr = 1.1f * (o[1] - 0.6f * o[2]);
+            // el "cuerpo" metálico del tanque
+            float bl, bb, bh;
+            body[0].tick (l, bl, bb, bh);  l += bodyGain * bb;
+            body[1].tick (rr, bl, bb, bh); rr += bodyGain * bb;
+            outL[i] += gain * outHp[0].highpass (l);
+            outR[i] += gain * outHp[1].highpass (rr);
         }
     }
 
 private:
-    struct Tank
+    struct Spring
     {
         std::vector<float> buf;
         size_t w = 0;
-        float lenSmp = 1000.0f, state = 0.0f, damp = 0.0f;
-        std::array<float, 8> ap {};
+        float len = 1000.0f, g = 0.7f;
+        std::array<std::array<float, kMaxK>, kStages> xs {}, ys {};
+        int idx = 0;
+        SVF2 lp, fbHp;
+        float modState = 0.0f, modTarget = 0.0f;
+        int modCount = 0;
     };
-    std::array<Tank, 2> tanks;
+    float rnd() { rng = rng * 1664525u + 1013904223u; return (float) (rng >> 8) / 8388608.0f - 1.0f; }
+
+    std::array<Spring, kSprings> springs;
     SVF2 inHp, inLp;
-    std::array<SVF2, 2> outHp;
-    float sr = 48000.0f, fb = 0.7f, apCoef = 0.68f, dampCoef = 0.5f, modPhase = 0.0f;
+    std::array<SVF2, 2> outHp, body;
+    float sr = 48000.0f, a = 0.65f, bodyGain = 0.35f;
+    int K = 6;
+    unsigned rng = 12345u;
 };
 
 // ---------------------------------------------------------------------------
@@ -330,7 +469,6 @@ public:
     void prepare (float sampleRate)
     {
         sr = sampleRate;
-        attack = std::exp (-1.0f / (0.0005f * sr));
         release = std::exp (-1.0f / (0.12f * sr));
         env = 0.0f;
     }
@@ -357,7 +495,7 @@ public:
             if (limiterOn)
             {
                 const float pk = std::max (std::abs (l), std::abs (r));
-                env = pk > env ? pk + attack * (env - pk) : pk + release * (env - pk);
+                env = pk > env ? pk : pk + release * (env - pk);   // ataque instantáneo: nunca recorta
                 const float gr = env > ceiling ? ceiling / env : 1.0f;
                 minGain = std::min (minGain, gr);
                 l *= gr; r *= gr;
@@ -372,7 +510,7 @@ public:
     }
 
 private:
-    float sr = 48000.0f, drive = 0.0f, ceiling = 0.97f, attack = 0.0f, release = 0.0f, env = 0.0f, grDb = 0.0f;
+    float sr = 48000.0f, drive = 0.0f, ceiling = 0.97f, release = 0.0f, env = 0.0f, grDb = 0.0f;
     bool limiterOn = true;
 };
 

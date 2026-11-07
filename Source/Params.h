@@ -7,6 +7,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
 #include <atomic>
+#include "SpaceEchoDSP.h"
 
 namespace ct
 {
@@ -50,19 +51,22 @@ enum class Unit { Db, Pct, Hz, Ms, Sec, Eq, Bi, Choice, Toggle, Raw };
     X (Kill4,       "kill4",      "Aislador: kill banda 4",       0.f,   1.f,   0.f,    0.f,   Toggle) \
     X (Kill5,       "kill5",      "Aislador: kill banda 5",       0.f,   1.f,   0.f,    0.f,   Toggle) \
     X (SubBoost,    "subBoost",   "Aislador: sub boost",          0.f,   1.f,   0.f,    0.f,   Toggle) \
-    X (MFilter,     "mFilter",    "Master: filtro",               0.f,   1.f,   .5f,    0.f,   Bi)     \
+    X (MHp,         "mHp",        "Master: pasa-altos (HP)",     20.f, 4000.f,  20.f,  250.f,   Hz)     \
+    X (MLp,         "mLp",        "Master: pasa-bajos (LP)",    100.f, 20000.f, 20000.f, 1500.f, Hz)    \
     X (MRes,        "mRes",       "Master: resonancia",           0.f,   1.f,   .3f,    0.f,   Pct)    \
     X (Drive,       "drive",      "Master: drive",                0.f,   1.f,   0.f,    0.f,   Pct)    \
     X (MLevel,      "mLevel",     "Master: nivel",              -40.f,   6.f,   0.f,  -10.f,   Db)     \
     X (Limiter,     "limiter",    "Master: limitador",            0.f,   1.f,   1.f,    0.f,   Toggle) \
     X (EchoTime,    "echoTime",   "Echo: tiempo",                20.f, 2000.f, 450.f,  450.f,   Ms)     \
-    X (EchoFb,      "echoFb",     "Echo: repeticiones",           0.f, 110.f,  55.f,    0.f,   Pct)    \
+    X (EchoHead,    "echoHead",   "Echo: cabezales (modo)",       0.f,   6.f,   0.f,    0.f,   Choice) \
+    X (EchoTone,    "echoTone",   "Echo: tono",                  -1.f,   1.f,   0.f,    0.f,   Pct)    \
+    X (EchoFb,      "echoFb",     "Echo: intensidad",           0.f, 110.f,  55.f,    0.f,   Pct)    \
     X (EchoSend,    "echoSendLvl","Echo: nivel del envío",        0.f,   1.f,   1.f,    0.f,   Pct)    \
     X (EchoLatch,   "echoLatch",  "Echo: envío fijo",             0.f,   1.f,   0.f,    0.f,   Toggle) \
     X (EchoRet,     "echoRet",    "Echo: retorno",              -40.f,   6.f,   0.f,  -10.f,   Db)     \
     X (EchoSrc,     "echoSrc",    "Echo / spring: fuente",        0.f,   2.f,   2.f,    0.f,   Choice) \
-    X (EchoLow,     "echoLow",    "Echo: corte de graves",       20.f, 1000.f, 180.f,  150.f,   Hz)     \
-    X (EchoHigh,    "echoHigh",   "Echo: corte de agudos",      800.f, 12000.f, 3200.f, 3000.f, Hz)     \
+    X (EchoLow,     "echoLow",    "Echo: corte de graves",       20.f, 1000.f, 110.f,  150.f,   Hz)     \
+    X (EchoHigh,    "echoHigh",   "Echo: corte de agudos",      800.f, 12000.f, 7000.f, 3000.f, Hz)     \
     X (EchoWow,     "echoWow",    "Echo: wow",                    0.f, 100.f,  25.f,    0.f,   Pct)    \
     X (EchoSat,     "echoSat",    "Echo: saturación",             0.f, 100.f,  35.f,    0.f,   Pct)    \
     X (EchoIner,    "echoIner",   "Echo: inercia",              0.02f,   2.f, .35f,   .35f,   Sec)    \
@@ -148,7 +152,10 @@ public:
                 if (v <= inf.min + 0.01f && inf.min <= -40.0f) return "OFF";
                 return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
             case Unit::Pct:   return juce::String (juce::roundToInt (v * (inf.max > 1.5f ? 1.0f : 100.0f))) + "%";
-            case Unit::Hz:    return v >= 1000.0f ? juce::String (v / 1000.0f, 1) + " kHz" : juce::String (juce::roundToInt (v)) + " Hz";
+            case Unit::Hz:
+                if (p == P::MHp && v <= 20.5f) return "OFF";
+                if (p == P::MLp && v >= 19900.0f) return "OFF";
+                return v >= 1000.0f ? juce::String (v / 1000.0f, 1) + " kHz" : juce::String (juce::roundToInt (v)) + " Hz";
             case Unit::Ms:    return juce::String (juce::roundToInt (v)) + " ms";
             case Unit::Sec:   return juce::String (v, 2) + " s";
             case Unit::Eq:
@@ -160,6 +167,8 @@ public:
                 return v < 0.5f ? "LPF " + juce::String (juce::roundToInt ((0.5f - v) * 200.0f)) + "%"
                                 : "HPF " + juce::String (juce::roundToInt ((v - 0.5f) * 200.0f)) + "%";
             case Unit::Choice:
+                if (p == P::EchoHead) return juce::String ("CAB. ") + headModeLabel (juce::roundToInt (v));
+                return juce::String (juce::roundToInt (v));
             case Unit::Toggle:
             case Unit::Raw:
             default:          return juce::String (v, 2);

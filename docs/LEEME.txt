@@ -15,7 +15,8 @@ CON LA DDJ-FLX4
 PADS DE LA FLX4
 - HOT CUE: hot cues
 - KEYBOARD: sirenas (1-5), throw echo (6), throw spring (7), freeze (8)
-- BEAT JUMP: kills del aislador (1-5), FLAT (6), SUB BOOST (7), kill echo (8)
+- BEAT JUMP: kills del aislador (1-5), FLAT (6), SUB BOOST (7), vías 3/4/5 (8)
+- PAD FX2 (SHIFT + PAD FX1): cabezales del echo (1-7) y siguiente modo (8)
 - BEAT LOOP: tiempo del echo (1-7) y TAP (8)
 - SAMPLER: samples
 

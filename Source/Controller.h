@@ -56,6 +56,7 @@ enum class Kind { Hold, Trigger };
     X (SrcCh2,     "srcCh2",     "Envíos: desde canal 2",           Trigger) \
     X (SrcBoth,    "srcBoth",    "Envíos: desde los dos canales",   Trigger) \
     X (IsoModeNext,"isoModeNext","Aislador: cambiar vías (3/4/5)",  Trigger) \
+    X (EchoHeadNext,"echoHeadNext","Echo: siguiente modo de cabezales", Trigger) \
     X (RevThrow,   "revThrow",   "Spring: throw (mantener)",        Hold)    \
     X (RevLatchT,  "revLatchT",  "Spring: envío fijo on/off",       Trigger) \
     X (Siren1,     "siren1",     "Sirena: dos tonos",               Hold)    \

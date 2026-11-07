@@ -1,7 +1,7 @@
 # Control Tower
 
 Preamp digital de sound system para tocar en vivo desde la Mac, sin conexión: dos decks, mixer con
-EQ aislador, aislador master de 3/4/5 vías, tape echo, spring, sirenas, 16 samples, grabación de la
+EQ aislador, aislador master de 3/4/5 vías, space echo de 3 cabezales, spring, sirenas, filtros HP/LP, 16 samples, grabación de la
 sesión. Viene mapeado de fábrica para la **Pioneer DDJ-FLX4**, y cualquier otro controlador se asigna
 con MIDI learn.
 
@@ -41,10 +41,10 @@ Mac ── USB ── DDJ-FLX4 ── MASTER OUT ──► mesa (2 canales de la
 | BEAT SYNC | **tap tempo** del echo |
 | LOOP IN / OUT / RELOOP, CUE/LOOP CALL ◀ ▶ | loop manual, salir/volver, mitad / doble |
 | TRIM, HI, MID, LOW | trim y EQ aislador del canal (al mínimo = kill de la banda) |
-| CFX | filtro del canal (izquierda pasa-bajos, derecha pasa-altos) |
+| CFX | filtro analógico de 24 dB del canal (izquierda pasa-bajos, derecha pasa-altos) |
 | Faders, crossfader | como siempre |
 | CUE de canal, HEADPHONES MIX | cue en auriculares y mezcla cue / master |
-| BEAT FX LEVEL/DEPTH | repeticiones del echo |
+| BEAT FX LEVEL/DEPTH | intensidad del echo |
 | BEAT FX ON/OFF | **tocar**: envío fijo al echo · **mantener**: throw al echo |
 | SHIFT + ON/OFF | lo mismo para el spring |
 | BEAT FX SELECT | kill del echo |
@@ -63,7 +63,8 @@ La FLX4 cambia de modo cuando el programa le confirma el botón; Control Tower l
 | **SAMPLER** | samples 1-8 (izquierda) y 9-16 (derecha); SHIFT + pad: parar |
 | **KEYBOARD** (SHIFT) → *sirenas* | 1 dos tonos · 2 láser · 3 ondulante · 4 caída · 5 sub drop · 6 throw echo · 7 throw spring · 8 freeze |
 | **BEAT LOOP** (SHIFT) → *tiempo del echo* | 1/16 · 1/8 · 1/8· · 1/4 · 1/4· · 1/2 · 1/4T · TAP |
-| **PAD FX2**, **KEY SHIFT** | libres para asignar en MAPEO MIDI |
+| **PAD FX2** (SHIFT) → *cabezales del echo* | 1 · 2 · 3 · 1+2 · 2+3 · 1+3 · 1+2+3 · 8 siguiente modo |
+| **KEY SHIFT** | libre para asignar en MAPEO MIDI |
 
 Las luces de la FLX4 siguen el estado: play, cue, loops, hot cues marcados, samples cargados,
 kills, throws y sirenas activas, y los vúmetros de canal.
@@ -72,7 +73,7 @@ kills, throws y sirenas activas, y los vúmetros de canal.
 
 Se detecta solo. Usa las 4 escenas (botón SCENE): 64 pads.
 
-- **Pad XY**: X = tiempo del echo, Y = repeticiones. Con una sirena sonando, X = tono e Y = velocidad
+- **Pad XY**: X = tiempo del echo, Y = intensidad. Con una sirena sonando, X = tono e Y = velocidad
   de la sirena. Al soltar el dedo, los valores quedan donde estaban.
 - **Escena 1 · dub / echo** (como Dub Echo): throw, tap, kill, freeze, envío fijo, 1/8, 1/8·, 1/4,
   1/4·, 1/4T, tiempo −, tiempo +, sirenas dos tonos, láser, ondulante y caída.
@@ -99,6 +100,7 @@ arrastrando un archivo.
 | E / R (mantener) | throw al echo / al spring |
 | F (mantener) | freeze del echo |
 | K / T | kill del echo / tap tempo |
+| H | siguiente modo de cabezales del echo |
 | 1 a 7 | divisiones del echo |
 | Q / P | play deck 1 / deck 2 |
 | ↑ ↓ ← → | biblioteca: mover / carpetas / temas |
@@ -112,18 +114,25 @@ arrastrando un archivo.
 - **Decks**: el tema se decodifica en segundo plano a la memoria (unos 10 MB por minuto). Los
   saltos de cue, hot cues, loops y scratch son instantáneos. Sólo se guardan en memoria los dos temas
   cargados, nunca la biblioteca entera. Arrastrá temas desde el Finder o desde la biblioteca a un deck.
-- **Mixer**: trim, EQ aislador de 3 bandas con kill (crossover Linkwitz-Riley, suma plana), filtro,
+- **Mixer**: trim, EQ aislador de 3 bandas con kill (crossover Linkwitz-Riley, suma plana), filtro analógico de 24 dB,
   fader, crossfader, cue.
 - **Aislador master**: 3, 4 o 5 vías (cambia en vivo sin clicks), ganancia y kill por banda, FLAT,
   SUB BOOST.
-- **Tape echo**: el motor de Dub Echo: inercia de cinta (cambiar el tiempo dobla el pitch), wow,
-  saturación, filtros en el loop, feedback hasta 110%, freeze y kill. Sólo entra señal con THROW (mantener) o ENVÍO FIJO;
-  la perilla NIV. ENVÍO es el nivel. El punto ENTRANDO, junto al título, se prende mientras entra señal.
-- **Spring**: reverb de resortes con cuerpo, cola, tono, y entrada desde el echo.
-- **Sirenas**: dos tonos, láser, ondulante, caída y sub drop, con tono y velocidad.
+- **Space echo**: eco de cinta de 3 cabezales de reproducción (separados 1 : 1,96 : 2,92, como en
+  los ecos de cinta clásicos de dub) con selector de 7 modos (CABEZALES), TIEMPO = velocidad de cinta
+  (al cambiarla el pitch de las repeticiones se dobla, con INERCIA), INTENSIDAD (autooscila cerca del
+  90-100 %, contenida por la saturación de cinta), TONO, pre/de-énfasis, golpe de cabezal en los graves,
+  pérdida de agudos que depende de la velocidad, wow/flutter y soplido. Freeze y kill. Sólo entra señal
+  con THROW (mantener) o ENVÍO FIJO; NIV. ENVÍO es el nivel. El punto ENTRANDO se prende mientras entra.
+- **Spring**: modelo físico de un tanque de 3 resortes: cada resorte es un loop con 60 allpass
+  dispersivos, así cada rebote llega como el "chirp" metálico de un resorte real y cada vuelta es más
+  dispersa que la anterior. TENSIÓN, COLA, TONO, y entrada desde el echo.
+- **Sirenas**: dos tonos, láser, ondulante, caída y sub drop, con tono y velocidad. Suenan como una
+  sirena a transistores: LFO por red RC, caída de pitch tipo descarga de capacitor, deriva del oscilador
+  y etapa de salida con filtro y saturación.
 - **Samples**: 16 ranuras. Clic derecho o arrastrar un archivo para cargar. Se recuerdan al reabrir.
 - **Entrada en vivo**: micrófono o línea de la placa, con envío al echo.
-- **Master**: filtro con resonancia, drive, nivel, limitador, vúmetros y **REC**. La grabación queda
+- **Master**: filtros HP y LP separados (24 dB, analógicos, con resonancia), drive, nivel, limitador, vúmetros y **REC**. La grabación queda
   en *Música / Control Tower* en WAV.
 
 Todo (valores, mapeos MIDI, carpetas de la biblioteca, samples) se guarda solo.
@@ -135,12 +144,11 @@ GitHub compila en cada push (`.github/workflows/build-macos.yml`), corre las pru
 ```
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCT_TESTS=ON
 cmake --build build -j 4
-./build/EngineTest_artefacts/Release/EngineTest out        # prueba el motor y genera out/preamp_demo.wav
+./build/EngineTest_artefacts/Release/EngineTest out        # prueba el motor y genera out/preamp_demo.wav y out/efectos_demo.wav
 c++ -O2 -std=c++17 -ISource tests/dsp_test.cpp -o dsp_test && ./dsp_test
 ```
 
-Estructura: `Dsp.h` (aislador, filtros, spring, dinámica), `Deck.h`, `TapeEchoDSP.h` y `SirenDSP.h`
-(de Dub Echo), `Sampler.h` no dependen de JUCE. `Engine` arma la cadena de audio, `Controller`
+Estructura: `Dsp.h` (aislador, filtros analógicos, spring, dinámica), `Deck.h`, `SpaceEchoDSP.h`, `SirenDSP.h`, `Sampler.h` no dependen de JUCE. `Engine` arma la cadena de audio, `Controller`
 el MIDI y las luces, `Views.h` la pantalla.
 
 El mapeo de la FLX4 usa la tabla de mensajes MIDI del proyecto libre Mixxx. El prototipo anterior en
