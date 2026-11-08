@@ -12,9 +12,14 @@ CON LA DDJ-FLX4
 - BIBLIOTECA: "+ CARPETA" y elegí la carpeta de tu música. Después: BROWSE para recorrer,
   apretar BROWSE para pasar de carpetas a temas, LOAD para cargar.
 
+LOOPS (botones de cada canal)
+- LOOP IN marca el inicio (mantener: loop de 4 beats), LOOP OUT el final, RELOOP/EXIT sale o vuelve.
+- CUE/LOOP CALL ◀ ▶: mitad / doble. Con "Q" prendido todo cae en el beat.
+- Si un botón no responde: AUDIO / SALIDAS > MONITOR MIDI muestra qué llega.
+
 PADS DE LA FLX4
 - HOT CUE: hot cues
-- KEYBOARD: sirenas (1-5), throw echo (6), throw spring (7), freeze (8)
+- KEYBOARD: sirena (1-4 tonos, 5 MANUAL, 6 LFO, 7 PITCH, 8 LATCH)
 - BEAT JUMP: kills del aislador (1-5), FLAT (6), SUB BOOST (7), vías 3/4/5 (8)
 - PAD FX2 (SHIFT + PAD FX1): cabezales del echo (1-7) y siguiente modo (8)
 - BEAT LOOP: tiempo del echo (1-7) y TAP (8)

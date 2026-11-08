@@ -76,6 +76,7 @@ public:
     std::array<Hold, kNumSirenPresets> sirenHold;
     void setSiren (int preset, int src, bool down);
     int  getSirenPlaying() const { return sirenPlaying.load(); }
+    int  getSirenLatched() const { return sirenLatched.load(); }
     bool isSirenHeld() const { for (auto& h : sirenHold) if (h.held()) return true; return false; }
     void killEcho() { echoKillReq.fetch_add (1); }
     bool isEchoSending() const { return echoSending.load(); }
@@ -148,7 +149,7 @@ private:
     Siren siren;
     int isoModeActive = 1, isoModePending = -1;
 
-    std::atomic<int> sirenLast { 0 }, sirenPlaying { -1 };
+    std::atomic<int> sirenLast { 0 }, sirenPlaying { -1 }, sirenLatched { -1 };
     std::atomic<int> echoKillReq { 0 };
     std::atomic<bool> echoSending { false }, revSending { false };
     int echoKillSeen = 0;

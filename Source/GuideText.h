@@ -17,7 +17,17 @@ JOG ................. tocado: scratch · borde: empujar pitch
 SHIFT + JOG ......... búsqueda rápida
 TEMPO ............... pitch (SHIFT + BEAT SYNC: rango 8/16/50%)
 BEAT SYNC ........... TAP TEMPO del echo
-LOOP IN/OUT/RELOOP .. loop manual · CUE/LOOP CALL ◀ ▶: mitad / doble
+SECCIÓN LOOP de cada canal (con QUANTIZE "Q" los puntos caen en el beat)
+  LOOP IN ........... marca el inicio · mantener medio segundo: loop de 4 beats
+  LOOP OUT .......... marca el final y empieza a repetir
+  RELOOP/EXIT ....... con loop: salir · sin loop: volver al último
+  SHIFT + RELOOP .... volver al loop y frenar
+  ◀ / ▶ ............. loop a la mitad / al doble (sólo con un loop andando)
+  SHIFT + ◀ / ▶ ..... 32 beats atrás / adelante
+  SHIFT + LOOP IN ... ajustar el inicio con el plato (otra vez para terminar)
+  SHIFT + LOOP OUT .. ajustar el final con el plato
+  Un loop nuevo siempre reemplaza al anterior. El BPM se detecta solo al cargar
+  (clic en "BPM" en el deck para corregir ×2 / ÷2).
 TRIM HI MID LOW ..... EQ aislador del canal (al mínimo = kill)
 CFX ................. filtro del canal
 CUE de canal ........ pre-escucha · HEADPHONES MIX: cue / master
@@ -38,8 +48,9 @@ PADS (el modo se cambia con los botones de modo, como siempre)
   BEAT JUMP ......... AISLADOR (divisor de frecuencias):
                       1-5 kill de cada banda · 6 FLAT · 7 SUB BOOST · 8 cambiar vías 3/4/5
   SAMPLER ........... samples 1-8 (izq.) y 9-16 (der.) · SHIFT + pad: parar
-  KEYBOARD (SHIFT) .. 1 dos tonos · 2 láser · 3 ondulante · 4 caída · 5 sub drop
-                      6 throw echo · 7 throw spring · 8 freeze
+  KEYBOARD (SHIFT) .. SIRENA: 1 SENO 1 · 2 SENO 2 · 3 TEST · 4 CUADRADA (mantener)
+                      5 MANUAL (mantener: sube · soltar: baja) · 6 LFO lento/medio/rápido
+                      7 PITCH grave/media/aguda · 8 LATCH (cada toque prende / apaga)
   BEAT LOOP (SHIFT) . tiempo del echo: 1/16 1/8 1/8· 1/4 1/4· 1/2 1/4T · 8 TAP
   PAD FX2 (SHIFT) ... CABEZALES del echo: 1 · 2 · 3 · 1+2 · 2+3 · 1+3 · 1+2+3 · 8 siguiente
   KEY SHIFT ......... libre: asignalo en MAPEO MIDI
@@ -53,10 +64,10 @@ PAD XY .............. X = tiempo del echo · Y = intensidad
 ESCENA 1 · DUB / ECHO, igual que Dub Echo (notas 36 a 51, en este orden)
   THROW · TAP · KILL · FREEZE · ENVÍO FIJO
   1/8 · 1/8· · 1/4 · 1/4· · 1/4T · TIEMPO − · TIEMPO + (mantener)
-  sirenas: DOS TONOS · LÁSER · ONDULANTE · CAÍDA
+  sirena: SENO 1 · SENO 2 · TEST · CUADRADA
 
 ESCENA 2 · SPRING, AISLADOR Y ENVÍOS (notas 52 a 67)
-  THROW SPRING · SPRING FIJO · THROW ECHO+SPRING · SUB DROP
+  THROW SPRING · SPRING FIJO · THROW ECHO+SPRING · SIRENA MANUAL
   KILL 1 · KILL 2 · KILL 3 · KILL 4 · KILL 5 · FLAT · SUB BOOST · VÍAS 3/4/5
   ENVÍO DESDE CANAL 1 · CANAL 2 · LOS DOS · PARAR SAMPLES
 
@@ -73,7 +84,9 @@ Si el eje X no responde: apagá el botón TOUCH SCALE del nanoPAD2.
 
 TECLADO
 ────────────────────────────────────────────────────────────
-Z X C V B (mantener) ... sirenas 1 a 5
+Z X C V (mantener) ..... sirena: SENO 1 · SENO 2 · TEST · CUADRADA
+B (mantener) ........... sirena MANUAL
+N / M / J .............. sirena: siguiente pitch / velocidad de LFO / latch
 E / R (mantener) ....... throw al echo / al spring
 F (mantener) ........... freeze del echo
 K / T .................. kill del echo / tap tempo

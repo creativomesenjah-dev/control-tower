@@ -94,7 +94,7 @@ public:
 
         // filtros dependientes de la velocidad de cinta (se recalculan por bloque)
         const float ms = delay / sr * 1000.0f;
-        const float tapeHf = std::clamp (5200.0f * std::pow (300.0f / std::max (ms, 20.0f), 0.35f), 1800.0f, 11000.0f);
+        const float tapeHf = std::clamp (6800.0f * std::pow (300.0f / std::max (ms, 20.0f), 0.35f), 1800.0f, 11000.0f);
         hfLoss.set (tapeHf, sr, 0.6f);
         bump.set (95.0f, sr, 1.1f);
         hp.set (params.lowCutHz, sr, 0.6f);
@@ -158,7 +158,7 @@ public:
             y = hfLoss.lowpass (y);
             // de-énfasis (compensa el pre-énfasis de la grabación)
             deEmph = y + emphCoef * (deEmph - y);
-            y = 0.5f * y + 0.5f * deEmph;
+            y = 0.65f * y + 0.35f * deEmph;   // la referencia conserva bastante agudo por repetición
 
             // tono (inclinación grave / agudo) y filtros del loop
             toneSplit = y + toneCoef * (toneSplit - y);

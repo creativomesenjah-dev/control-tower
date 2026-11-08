@@ -87,6 +87,12 @@ juce::String Engine::getSampleName (int slot) const
 void Engine::setSiren (int preset, int src, bool down)
 {
     preset = juce::jlimit (0, kNumSirenPresets - 1, preset);
+    if (params.on (P::SirenLatch))
+    {
+        // latch: cada toque prende o apaga esa sirena (el mismo pad la apaga, otro pad la cambia)
+        if (down) { sirenLatched.store (sirenLatched.load() == preset ? -1 : preset); sirenLast.store (preset); }
+        return;
+    }
     sirenHold[(size_t) preset].set (src, down);
     if (down) sirenLast.store (preset);
 }
@@ -228,6 +234,7 @@ void Engine::processChunk (const float* const* in, int numIn, float* const* out,
     static const float ranges[] = { 0.08f, 0.16f, 0.5f };
     decks[0].setPitch (p.get (P::PitchA), ranges[p.choice (P::RangeA)]);
     decks[1].setPitch (p.get (P::PitchB), ranges[p.choice (P::RangeB)]);
+    for (auto& dk : decks) dk.setQuantize (p.on (P::Quantize));
     decks[0].process (aL.data(), aR.data(), n);
     decks[1].process (bL.data(), bR.data(), n);
 
@@ -314,6 +321,9 @@ void Engine::processChunk (const float* const* in, int numIn, float* const* out,
         const int last = sirenLast.load();
         if (sirenHold[(size_t) last].held()) held = last;
         else for (int i = 0; i < kNumSirenPresets; ++i) if (sirenHold[(size_t) i].held()) { held = i; break; }
+        if (! p.on (P::SirenLatch)) sirenLatched.store (-1);
+        if (held < 0) held = sirenLatched.load();
+        siren.setPanel (p.choice (P::SirenPitchPos), p.choice (P::SirenSpeed));
 
         if (held >= 0 && (! siren.isHeld() || siren.getPreset() != held)) siren.noteOn (held);
         else if (held < 0 && siren.isHeld()) siren.noteOff();

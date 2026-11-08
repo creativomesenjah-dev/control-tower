@@ -53,7 +53,7 @@ void Controller::perform (A a, int src, bool down)
         case A::Load1: case A::Load2:
             if (down) { const int d = a == A::Load1 ? 0 : 1; runOnMessageThread ([this, d] { if (onLoadRequest) onLoadRequest (d); }); }
             return;
-        case A::LoopIn1:  case A::LoopIn2:  if (down) deckCmd (a == A::LoopIn1 ? 0 : 1, DeckCmd::LoopIn); return;
+        case A::LoopIn1:  case A::LoopIn2:  deckCmd (a == A::LoopIn1 ? 0 : 1, DeckCmd::LoopIn, 0, down ? 1.0 : 0.0); return;
         case A::LoopOut1: case A::LoopOut2: if (down) deckCmd (a == A::LoopOut1 ? 0 : 1, DeckCmd::LoopOut); return;
         case A::Reloop1:  case A::Reloop2:  if (down) deckCmd (a == A::Reloop1 ? 0 : 1, DeckCmd::Reloop); return;
         case A::Hot1A: case A::Hot1B: case A::Hot1C: case A::Hot1D:
@@ -77,6 +77,9 @@ void Controller::perform (A a, int src, bool down)
         case A::SrcCh2:  if (down) p.set (P::EchoSrc, 1.0f); return;
         case A::SrcBoth: if (down) p.set (P::EchoSrc, 2.0f); return;
         case A::IsoModeNext: if (down) p.set (P::IsoMode, (float) ((p.choice (P::IsoMode) + 1) % 3)); return;
+        case A::SirenPitchNext: if (down) p.set (P::SirenPitchPos, (float) ((p.choice (P::SirenPitchPos) + 1) % kNumSirenPitches)); return;
+        case A::SirenSpeedNext: if (down) p.set (P::SirenSpeed, (float) ((p.choice (P::SirenSpeed) + 1) % kNumSirenSpeeds)); return;
+        case A::SirenLatchT:    if (down) p.toggle (P::SirenLatch); return;
         case A::EchoHeadNext: if (down) p.set (P::EchoHead, (float) ((p.choice (P::EchoHead) + 1) % kNumHeadModes)); return;
         case A::EchoKill:
             if (down)
@@ -119,6 +122,84 @@ void Controller::perform (A a, int src, bool down)
 }
 
 // ---------------------------------------------------------------------------
+void Controller::logMidi (int key, const juce::String& line)
+{
+    const juce::SpinLock::ScopedLockType sl (lastLock);
+    // un mismo control que se mueve (plato, fader) actualiza su línea en vez de llenar la lista
+    if (! midiLog.empty() && midiLog.front().key == key) midiLog.front().text = line;
+    else
+    {
+        midiLog.push_front ({ key, line });
+        while (midiLog.size() > 12) midiLog.pop_back();
+    }
+}
+
+juce::String Controller::getMidiLog() const
+{
+    const juce::SpinLock::ScopedLockType sl (lastLock);
+    juce::StringArray lines;
+    for (auto& l : midiLog) lines.add (l.text);
+    return lines.joinIntoString ("\n");
+}
+
+// nombre de cada control de la FLX4 (para el monitor), según la tabla del mapeo de Mixxx
+juce::String Controller::describeFlx4 (int status, int d1)
+{
+    const int kind = status & 0xF0, ch = status & 0x0F;
+    const juce::String deck = " (deck " + juce::String (ch + 1) + ")";
+    if (kind == 0xB0)
+    {
+        if (ch <= 1)
+        {
+            switch (d1)
+            {
+                case 0x21: case 0x22: case 0x23: case 0x1F: case 0x29: return "PLATO" + deck;
+                case 0x00: case 0x20: return "TEMPO" + deck;
+                default: break;
+            }
+        }
+        if (ch == 6 && (d1 == 0x40 || d1 == 0x64)) return "BROWSE (girar)";
+        return "perilla / fader (CC " + juce::String (d1) + ")";
+    }
+    if (kind != 0x90 && kind != 0x80) return "otro mensaje";
+    if (ch <= 1)
+    {
+        switch (d1)
+        {
+            case 0x0B: return "PLAY" + deck;
+            case 0x0C: return "CUE" + deck;
+            case 0x48: return "SHIFT + CUE: al principio" + deck;
+            case 0x10: return "LOOP IN: marcar inicio (mantener: 4 beats)" + deck;
+            case 0x11: return "LOOP OUT: marcar final y repetir" + deck;
+            case 0x4D: return "RELOOP/EXIT" + deck;
+            case 0x50: return "SHIFT + RELOOP: volver al loop y frenar" + deck;
+            case 0x4C: return "SHIFT + LOOP IN: ajustar inicio con el plato" + deck;
+            case 0x4E: return "SHIFT + LOOP OUT: ajustar final con el plato" + deck;
+            case 0x51: return u8 ("CUE/LOOP CALL ◀: loop a la mitad") + deck;
+            case 0x53: return u8 ("CUE/LOOP CALL ▶: loop al doble") + deck;
+            case 0x3E: return u8 ("SHIFT + ◀: 32 beats atrás") + deck;
+            case 0x3D: return u8 ("SHIFT + ▶: 32 beats adelante") + deck;
+            case 0x58: return "BEAT SYNC: tap tempo";
+            case 0x60: return "SHIFT + BEAT SYNC: rango de pitch" + deck;
+            case 0x54: return "CUE de canal" + deck;
+            case 0x3F: return "SHIFT" + deck;
+            case 0x36: case 0x67: return "PLATO tocado" + deck;
+            case 0x1B: case 0x69: case 0x1E: case 0x6B: case 0x20: case 0x6D: case 0x22: case 0x6F: return "botón de modo de pads" + deck;
+            default: break;
+        }
+        return "botón " + juce::String (d1) + deck;
+    }
+    if (ch >= 7 && ch <= 10)
+    {
+        static const char* groups[] = { "HOT CUE", "PAD FX1", "BEAT JUMP", "SAMPLER", "KEYBOARD", "PAD FX2", "BEAT LOOP", "KEY SHIFT" };
+        return juce::String ("pad ") + juce::String ((d1 & 0x0F) + 1) + " · " + groups[(d1 >> 4) & 7]
+             + ((ch == 8 || ch == 10) ? " + SHIFT" : "") + " (deck " + juce::String (ch <= 8 ? 1 : 2) + ")";
+    }
+    if (ch == 6) return "BROWSE / LOAD";
+    if (ch == 4 || ch == 5) return "BEAT FX";
+    return "otro botón";
+}
+
 void Controller::handleIncomingMidiMessage (juce::MidiInput* source, const juce::MidiMessage& m)
 {
     dispatch (source != nullptr ? source->getName() : juce::String(), m);
@@ -148,7 +229,19 @@ void Controller::dispatch (const juce::String& deviceName, const juce::MidiMessa
                  + u8 (" · canal ") + juce::String (m.getChannel()) + " = " + juce::String (juce::roundToInt (value * 127.0f));
     }
 
-    if (handleLearned (m, key, value, press, isButton)) return;
+    const bool learnedHit = handleLearned (m, key, value, press, isButton);
+    {
+        const auto* raw = m.getRawData();
+        juce::String hex;
+        for (int i = 0; i < juce::jmin (3, m.getRawDataSize()); ++i) hex << juce::String::toHexString ((int) raw[i]).paddedLeft ('0', 2).toUpperCase() << " ";
+        juce::String what;
+        if (learnedHit) what = u8 ("→ asignado en MAPEO MIDI (tiene prioridad)");
+        else if (fromFlx4) what = flx4Enabled.load() ? u8 ("→ ") + describeFlx4 (raw[0], raw[1]) : u8 ("→ mapeo de la FLX4 apagado");
+        else if (fromNano) what = nanoEnabled.load() ? u8 ("→ nanoPAD2") : u8 ("→ mapeo del nanoPAD2 apagado");
+        else what = u8 ("→ sin asignar");
+        logMidi (key, (fromFlx4 ? "FLX4  " : fromNano ? "nanoPAD2  " : deviceName + "  ") + hex + what);
+    }
+    if (learnedHit) return;
 
     if (fromFlx4 && flx4Enabled.load())
         handleFlx4 (m);
@@ -302,11 +395,17 @@ void Controller::handleFlx4 (const juce::MidiMessage& m)
             case 0x0B: if (press) cmd (DeckCmd::PlayToggle); break;
             case 0x0C: cmd (DeckCmd::Cue, 0, press ? 1.0 : 0.0); break;
             case 0x48: if (press) cmd (DeckCmd::JumpStart); break;
-            case 0x10: if (press) cmd (DeckCmd::LoopIn); break;
-            case 0x11: if (press) cmd (DeckCmd::LoopOut); break;
-            case 0x4D: if (press) cmd (DeckCmd::Reloop); break;
-            case 0x51: if (press) cmd (DeckCmd::LoopHalve); break;
-            case 0x53: if (press) cmd (DeckCmd::LoopDouble); break;
+            // sección LOOP de cada canal (mensajes del mapeo de la FLX4 de Mixxx)
+            case 0x10: cmd (DeckCmd::LoopIn, 0, press ? 1.0 : 0.0); break;        // LOOP IN (mantener: 4 beats)
+            case 0x11: if (press) cmd (DeckCmd::LoopOut); break;                   // LOOP OUT
+            case 0x4D: if (press) cmd (DeckCmd::Reloop); break;                    // RELOOP/EXIT
+            case 0x50: if (press) cmd (DeckCmd::ReloopStop); break;                // SHIFT + RELOOP: volver y frenar
+            case 0x4C: if (press) cmd (DeckCmd::LoopAdjustIn); break;              // SHIFT + LOOP IN: ajustar inicio con el plato
+            case 0x4E: if (press) cmd (DeckCmd::LoopAdjustOut); break;             // SHIFT + LOOP OUT: ajustar final
+            case 0x51: if (press) cmd (DeckCmd::LoopHalve); break;                 // CUE/LOOP CALL ◀: mitad
+            case 0x53: if (press) cmd (DeckCmd::LoopDouble); break;                // CUE/LOOP CALL ▶: doble
+            case 0x3E: if (press) cmd (DeckCmd::BeatJump, 0, -32.0); break;        // SHIFT + ◀: 32 beats atrás
+            case 0x3D: if (press) cmd (DeckCmd::BeatJump, 0, 32.0); break;         // SHIFT + ▶: 32 beats adelante
             case 0x58: if (press) engine.tap(); break;
             case 0x60:
                 if (press)
@@ -384,12 +483,12 @@ void Controller::handleFlx4 (const juce::MidiMessage& m)
             if (sh) { if (press) engine.deck (d).pushCommand ({ DeckCmd::HotcueClear, i, 1.0 }); }
             else engine.deck (d).pushCommand ({ DeckCmd::Hotcue, i, press ? 1.0 : 0.0 });
         }
-        else if (group == 0x40)     // KEYBOARD -> DUB: sirenas, throws, freeze
+        else if (group == 0x40)     // KEYBOARD -> SIRENA BENIDUB: 4 tonos, MANUAL, LFO, pitch, latch
         {
             if (i < 5) engine.setSiren (i, src, press);
-            else if (i == 5) engine.echoThrow.set (src, press);
-            else if (i == 6) engine.revThrow.set (src, press);
-            else engine.echoFreeze.set (src, press);
+            else if (i == 5) perform (A::SirenSpeedNext, src, press);
+            else if (i == 6) perform (A::SirenPitchNext, src, press);
+            else perform (A::SirenLatchT, src, press);
         }
         else if (group == 0x10)     // PAD FX1 -> ECHO Y SPRING
         {
@@ -569,10 +668,12 @@ void Controller::updateLeds()
         sendLed (st, 0x0C, loaded && ! dk.isPlaying() ? 0x7F : 0);
         sendLed (st, 0x54, p.on (d == 0 ? P::CueA : P::CueB) ? 0x7F : 0);
         // LOOP IN / OUT encendidos con un tema cargado (como los inicializa Mixxx), titilan con el loop activo
+        // (como Mixxx): con ajuste por plato sólo titila el punto que se mueve; RELOOP prendido = loop andando
+        const int adj = dk.getLoopAdjust();
         const int loopLed = loaded ? (dk.isLoopActive() ? (blink ? 0x7F : 0) : 0x7F) : 0;
-        sendLed (st, 0x10, loopLed);
-        sendLed (st, 0x11, loopLed);
-        sendLed (st, 0x4D, loaded ? 0x7F : 0);
+        sendLed (st, 0x10, adj == 2 ? 0 : loopLed);
+        sendLed (st, 0x11, adj == 1 ? 0 : loopLed);
+        sendLed (st, 0x4D, dk.isLoopActive() ? 0x7F : 0);
 
         // luz del botón de modo activo (así la FLX4 cambia de modo)
         const int mode = flx4PadMode[d].load();
@@ -601,9 +702,9 @@ void Controller::updateLeds()
 
             int dub = 0;
             if (i < 5) dub = engine.getSirenPlaying() == i ? 0x7F : 0;
-            else if (i == 5) dub = engine.echoThrow.held() ? 0x7F : 0;
-            else if (i == 6) dub = engine.revThrow.held() ? 0x7F : 0;
-            else dub = engine.echoFreeze.held() ? 0x7F : 0;
+            else if (i == 5) dub = p.choice (P::SirenSpeed) > 0 ? 0x7F : 0;
+            else if (i == 6) dub = p.choice (P::SirenPitchPos) > 0 ? 0x7F : 0;
+            else dub = p.on (P::SirenLatch) ? 0x7F : 0;
             sendLed (ps, 0x40 + i, dub);
 
             int iso = 0;

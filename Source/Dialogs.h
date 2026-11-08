@@ -50,8 +50,21 @@ public:
         hint.setColour (juce::Label::textColourId, Colours::textDim);
         hint.setFont (juce::FontOptions (12.0f));
         addAndMakeVisible (hint);
-        setSize (560, 680);
-        startTimer (1000);
+
+        monitorTitle.setText (u8 ("MONITOR MIDI — apretá un botón del controlador y mirá qué llega y qué hace"), juce::dontSendNotification);
+        monitorTitle.setColour (juce::Label::textColourId, Colours::amber);
+        monitorTitle.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        addAndMakeVisible (monitorTitle);
+        monitor.setMultiLine (true);
+        monitor.setReadOnly (true);
+        monitor.setCaretVisible (false);
+        monitor.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 12.0f, juce::Font::plain));
+        monitor.setColour (juce::TextEditor::backgroundColourId, Colours::panel);
+        monitor.setColour (juce::TextEditor::textColourId, Colours::text);
+        monitor.setColour (juce::TextEditor::outlineColourId, Colours::line);
+        addAndMakeVisible (monitor);
+        setSize (600, 880);
+        startTimer (200);
     }
 
     void paint (juce::Graphics& g) override { g.fillAll (Colours::bg); }
@@ -59,6 +72,9 @@ public:
     void resized() override
     {
         auto r = getLocalBounds().reduced (12);
+        monitor.setBounds (r.removeFromBottom (180));
+        monitorTitle.setBounds (r.removeFromBottom (22));
+        r.removeFromBottom (6);
         hint.setBounds (r.removeFromBottom (40));
         nano.setBounds (r.removeFromBottom (24));
         invert.setBounds (r.removeFromBottom (24));
@@ -74,6 +90,9 @@ public:
 private:
     void timerCallback() override
     {
+        const auto log = ctrl.getMidiLog();
+        if (log != monitor.getText()) monitor.setText (log.isEmpty() ? u8 ("(todavía no llegó nada)") : log, false);
+        if (++slowTick % 5 != 0) return;
         // deshabilitar pares que la placa no tiene
         const int outs = engine.getNumOutputs();
         for (int p = 0; p < 4; ++p)
@@ -87,8 +106,10 @@ private:
     Controller& ctrl;
     juce::AudioDeviceSelectorComponent selector;
     juce::ComboBox masterCombo, phonesCombo;
-    juce::Label masterLabel, phonesLabel, hint;
+    juce::Label masterLabel, phonesLabel, hint, monitorTitle;
     juce::ToggleButton flx4, invert, nano;
+    juce::TextEditor monitor;
+    int slowTick = 0;
 };
 
 // ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@
 #include <array>
 #include <atomic>
 #include "SpaceEchoDSP.h"
+#include "SirenDSP.h"
 
 namespace ct
 {
@@ -34,6 +35,7 @@ enum class Unit { Db, Pct, Hz, Ms, Sec, Eq, Bi, Choice, Toggle, Raw };
     X (FilterB,     "filterB",    "Canal 2: filtro",              0.f,   1.f,   .5f,    0.f,   Bi)     \
     X (FaderB,      "faderB",     "Canal 2: fader",               0.f,   1.f,   1.f,    0.f,   Raw)    \
     X (PitchB,      "pitchB",     "Deck 2: pitch",               -1.f,   1.f,   0.f,    0.f,   Raw)    \
+    X (Quantize,    "quantize",   "Loops: QUANTIZE (al beat)",    0.f,   1.f,   1.f,    0.f,   Toggle) \
     X (RangeB,      "rangeB",     "Deck 2: rango de pitch",       0.f,   2.f,   0.f,    0.f,   Choice) \
     X (CueB,        "cueB",       "Canal 2: cue auriculares",     0.f,   1.f,   0.f,    0.f,   Toggle) \
     X (Crossfader,  "xfader",     "Crossfader",                   0.f,   1.f,   .5f,    0.f,   Raw)    \
@@ -60,7 +62,7 @@ enum class Unit { Db, Pct, Hz, Ms, Sec, Eq, Bi, Choice, Toggle, Raw };
     X (EchoTime,    "echoTime",   "Echo: tiempo",                20.f, 2000.f, 450.f,  450.f,   Ms)     \
     X (EchoHead,    "echoHead",   "Echo: cabezales (modo)",       0.f,   6.f,   0.f,    0.f,   Choice) \
     X (EchoTone,    "echoTone",   "Echo: tono",                  -1.f,   1.f,   0.f,    0.f,   Pct)    \
-    X (EchoFb,      "echoFb",     "Echo: intensidad",           0.f, 110.f,  55.f,    0.f,   Pct)    \
+    X (EchoFb,      "echoFb",     "Echo: intensidad",           0.f, 110.f,  60.f,    0.f,   Pct)    \
     X (EchoSend,    "echoSendLvl","Echo: nivel del envío",        0.f,   1.f,   1.f,    0.f,   Pct)    \
     X (EchoLatch,   "echoLatch",  "Echo: envío fijo",             0.f,   1.f,   0.f,    0.f,   Toggle) \
     X (EchoRet,     "echoRet",    "Echo: retorno",              -40.f,   6.f,   0.f,  -10.f,   Db)     \
@@ -77,8 +79,11 @@ enum class Unit { Db, Pct, Hz, Ms, Sec, Eq, Bi, Choice, Toggle, Raw };
     X (RevDecay,    "revDecay",   "Spring: cola",                 0.f,   1.f,   .6f,    0.f,   Pct)    \
     X (RevTone,     "revTone",    "Spring: tono",                 0.f,   1.f,   .5f,    0.f,   Pct)    \
     X (EchoToRev,   "echoToRev",  "Echo al spring",               0.f,   1.f,  .25f,    0.f,   Pct)    \
-    X (SirenPitch,  "sirenPitch", "Sirena: tono",                 0.f,   1.f,   .5f,    0.f,   Pct)    \
-    X (SirenRate,   "sirenRate",  "Sirena: velocidad",            0.f,   1.f,   .5f,    0.f,   Pct)    \
+    X (SirenPitchPos,"sirenPitchPos","Sirena: pitch (grave/media/aguda)", 0.f, 2.f, 1.f, 0.f, Choice) \
+    X (SirenSpeed,  "sirenSpeed", "Sirena: LFO (lento/medio/rápido)", 0.f, 2.f, 1.f, 0.f,  Choice) \
+    X (SirenLatch,  "sirenLatch", "Sirena: latch (queda sonando)", 0.f, 1.f, 0.f,  0.f,   Toggle) \
+    X (SirenPitch,  "sirenPitch", "Sirena: tono fino",                 0.f,   1.f,   .5f,    0.f,   Pct)    \
+    X (SirenRate,   "sirenRate",  "Sirena: velocidad fina",            0.f,   1.f,   .5f,    0.f,   Pct)    \
     X (SirenLevel,  "sirenLevel", "Sirena: volumen",            -40.f,   6.f,  -6.f,  -10.f,   Db)     \
     X (SirenEcho,   "sirenEcho",  "Sirena: al echo",              0.f,   1.f,   .5f,    0.f,   Pct)    \
     X (SampLevel,   "sampLevel",  "Samples: volumen",           -40.f,   6.f,  -3.f,  -10.f,   Db)     \
@@ -168,6 +173,8 @@ public:
                                 : "HPF " + juce::String (juce::roundToInt ((v - 0.5f) * 200.0f)) + "%";
             case Unit::Choice:
                 if (p == P::EchoHead) return juce::String ("CAB. ") + headModeLabel (juce::roundToInt (v));
+                if (p == P::SirenPitchPos) return juce::String::fromUTF8 (sirenPitchName (juce::roundToInt (v)));
+                if (p == P::SirenSpeed) return juce::String::fromUTF8 (sirenSpeedName (juce::roundToInt (v)));
                 return juce::String (juce::roundToInt (v));
             case Unit::Toggle:
             case Unit::Raw:

@@ -359,9 +359,12 @@ public:
             s.fbHp.set (60.0f, sr, 0.6f);
             s.modState = s.modTarget = 0.0f; s.modCount = 0;
         }
-        inHp.reset(); inLp.reset(); outHp[0].reset(); outHp[1].reset(); body[0].reset(); body[1].reset();
-        inHp.set (120.0f, sr, 0.6f); inLp.set (6000.0f, sr, 0.6f);
-        outHp[0].set (90.0f, sr); outHp[1].set (90.0f, sr);
+        inHp.reset(); inHp2.reset(); inLp.reset();
+        for (auto* a : { &outHp, &outHp2, &outLp, &outLp2, &body }) for (auto& f : *a) f.reset();
+        // medido en la referencia: casi nada debajo de 300 Hz ni arriba de 2,5 kHz (transductor + resortes)
+        inHp.set (400.0f, sr, 0.54f); inHp2.set (400.0f, sr, 1.31f);    // Butterworth de 4º orden
+        inLp.set (4500.0f, sr, 0.6f);
+        for (int c = 0; c < 2; ++c) { outHp[(size_t) c].set (300.0f, sr, 0.54f); outHp2[(size_t) c].set (300.0f, sr, 1.31f); }
         setParams (0.5f, 0.5f, 0.5f);
     }
 
@@ -373,17 +376,20 @@ public:
         tone01 = std::clamp (tone01, 0.0f, 1.0f);
         static const float ratio[kSprings] = { 1.0f, 1.173f, 1.341f };
         const float base = (0.026f + 0.030f * size01) * sr;
-        const float rt60 = 0.7f + 4.3f * decay01 * decay01 + 0.6f * decay01;   // 0,7 .. 5,6 s
+        const float rt60 = 1.0f + 5.0f * decay01;   // 1 .. 6 s (con 60 %: ~3,5 s medidos, como la referencia)
         for (int i = 0; i < kSprings; ++i)
         {
             auto& s = springs[(size_t) i];
             s.len = base * ratio[i];
             s.g = std::pow (10.0f, -3.0f * (s.len / sr) / rt60);
-            s.lp.set (2400.0f + 4200.0f * tone01, sr, 0.6f);
+            s.lp.set (2200.0f + 2600.0f * tone01, sr, 0.6f);
         }
+        // pasa-bajos de salida de 4º orden: con TONO al 50 % corta en ~2,6 kHz
+        const float outLpHz = 2200.0f + 1600.0f * tone01;
+        for (int c = 0; c < 2; ++c) { outLp[(size_t) c].set (outLpHz, sr, 0.54f); outLp2[(size_t) c].set (outLpHz, sr, 1.31f); }
         a = 0.62f + 0.16f * size01;          // más tensión = chirp más marcado
-        for (auto& b : body) b.set (650.0f + 900.0f * tone01, sr, 0.9f);
-        bodyGain = 0.35f;
+        for (auto& b : body) b.set (900.0f + 800.0f * tone01, sr, 0.8f);
+        bodyGain = 0.6f;
     }
 
     // in: mono. Suma la reverb (estéreo) en outL/outR con ganancia gain.
@@ -392,7 +398,7 @@ public:
         for (int i = 0; i < n; ++i)
         {
             // el transductor de entrada: sin graves, satura un poco con golpes fuertes (el "crash" del tanque)
-            float x = inLp.lowpass (inHp.highpass (in[i]));
+            float x = inLp.lowpass (inHp2.highpass (inHp.highpass (in[i])));
             x = fastTanh (1.4f * x) * 0.7f;
 
             float o[kSprings];
@@ -428,14 +434,17 @@ public:
                 o[si] = u;
             }
 
-            float l = 1.1f * (o[0] + 0.6f * o[2]);
-            float rr = 1.1f * (o[1] - 0.6f * o[2]);
+            // estéreo bien abierto (la referencia tiene L/R casi sin correlación)
+            float l = 1.1f * (o[0] - 0.35f * o[1] + 0.6f * o[2]);
+            float rr = 1.1f * (o[1] - 0.35f * o[0] - 0.6f * o[2]);
             // el "cuerpo" metálico del tanque
             float bl, bb, bh;
             body[0].tick (l, bl, bb, bh);  l += bodyGain * bb;
             body[1].tick (rr, bl, bb, bh); rr += bodyGain * bb;
-            outL[i] += gain * outHp[0].highpass (l);
-            outR[i] += gain * outHp[1].highpass (rr);
+            l  = outLp2[0].lowpass (outLp[0].lowpass (outHp2[0].highpass (outHp[0].highpass (l))));
+            rr = outLp2[1].lowpass (outLp[1].lowpass (outHp2[1].highpass (outHp[1].highpass (rr))));
+            outL[i] += gain * 1.6f * l;
+            outR[i] += gain * 1.6f * rr;
         }
     }
 
@@ -454,9 +463,9 @@ private:
     float rnd() { rng = rng * 1664525u + 1013904223u; return (float) (rng >> 8) / 8388608.0f - 1.0f; }
 
     std::array<Spring, kSprings> springs;
-    SVF2 inHp, inLp;
-    std::array<SVF2, 2> outHp, body;
-    float sr = 48000.0f, a = 0.65f, bodyGain = 0.35f;
+    SVF2 inHp, inHp2, inLp;
+    std::array<SVF2, 2> outHp, outHp2, outLp, outLp2, body;
+    float sr = 48000.0f, a = 0.65f, bodyGain = 0.6f;
     int K = 6;
     unsigned rng = 12345u;
 };

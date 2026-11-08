@@ -39,7 +39,11 @@ Mac ── USB ── DDJ-FLX4 ── MASTER OUT ──► mesa (2 canales de la
 | SHIFT + JOG | búsqueda rápida |
 | TEMPO | pitch (±8%; SHIFT + BEAT SYNC cambia a ±16 / ±50) |
 | BEAT SYNC | **tap tempo** del echo |
-| LOOP IN / OUT / RELOOP, CUE/LOOP CALL ◀ ▶ | loop manual, salir/volver, mitad / doble |
+| LOOP IN | marca el inicio del loop (al beat con QUANTIZE); **mantener medio segundo: loop de 4 beats** |
+| LOOP OUT | marca el final y empieza a repetir |
+| RELOOP/EXIT | con loop: salir · sin loop: volver al último · SHIFT: volver y frenar |
+| CUE/LOOP CALL ◀ ▶ | loop a la mitad / al doble (sólo con un loop andando) · SHIFT: 32 beats atrás / adelante |
+| SHIFT + LOOP IN / OUT | ajustar el inicio / final del loop con el plato (otra vez para terminar) |
 | TRIM, HI, MID, LOW | trim y EQ aislador del canal (al mínimo = kill de la banda) |
 | CFX | filtro analógico de 24 dB del canal (izquierda pasa-bajos, derecha pasa-altos) |
 | Faders, crossfader | como siempre |
@@ -61,7 +65,7 @@ La FLX4 cambia de modo cuando el programa le confirma el botón; Control Tower l
 | **PAD FX1** → *echo y spring* | 1 throw echo · 2 throw spring · 3 freeze · 4 kill echo · 5 tiempo − · 6 tiempo + (mantener) · 7 envío fijo echo · 8 envío fijo spring |
 | **BEAT JUMP** → *aislador* | 1-5 kill de cada banda · 6 FLAT · 7 SUB BOOST · 8 cambiar vías 3/4/5 |
 | **SAMPLER** | samples 1-8 (izquierda) y 9-16 (derecha); SHIFT + pad: parar |
-| **KEYBOARD** (SHIFT) → *sirenas* | 1 dos tonos · 2 láser · 3 ondulante · 4 caída · 5 sub drop · 6 throw echo · 7 throw spring · 8 freeze |
+| **KEYBOARD** (SHIFT) → *sirena* | 1 SENO 1 · 2 SENO 2 · 3 TEST · 4 CUADRADA · 5 MANUAL · 6 LFO · 7 PITCH · 8 LATCH |
 | **BEAT LOOP** (SHIFT) → *tiempo del echo* | 1/16 · 1/8 · 1/8· · 1/4 · 1/4· · 1/2 · 1/4T · TAP |
 | **PAD FX2** (SHIFT) → *cabezales del echo* | 1 · 2 · 3 · 1+2 · 2+3 · 1+3 · 1+2+3 · 8 siguiente modo |
 | **KEY SHIFT** | libre para asignar en MAPEO MIDI |
@@ -76,8 +80,8 @@ Se detecta solo. Usa las 4 escenas (botón SCENE): 64 pads.
 - **Pad XY**: X = tiempo del echo, Y = intensidad. Con una sirena sonando, X = tono e Y = velocidad
   de la sirena. Al soltar el dedo, los valores quedan donde estaban.
 - **Escena 1 · dub / echo** (como Dub Echo): throw, tap, kill, freeze, envío fijo, 1/8, 1/8·, 1/4,
-  1/4·, 1/4T, tiempo −, tiempo +, sirenas dos tonos, láser, ondulante y caída.
-- **Escena 2 · spring, aislador y envíos**: throw spring, spring fijo, throw echo + spring, sub drop,
+  1/4·, 1/4T, tiempo −, tiempo +, sirena SENO 1, SENO 2, TEST y CUADRADA.
+- **Escena 2 · spring, aislador y envíos**: throw spring, spring fijo, throw echo + spring, sirena MANUAL,
   kills 1-5, FLAT, SUB BOOST, vías 3/4/5, envío desde canal 1 / 2 / los dos, parar samples.
 - **Escena 3 · samples 1 a 16.**
 - **Escena 4 · decks**: play y cue de cada deck, hot cues 1-4 de cada deck, reloop 1 y 2, load 1 y 2.
@@ -96,7 +100,9 @@ arrastrando un archivo.
 
 | Tecla | Acción |
 |---|---|
-| Z X C V B (mantener) | sirenas 1 a 5 |
+| Z X C V (mantener) | sirena: SENO 1 · SENO 2 · TEST · CUADRADA |
+| B (mantener) | sirena MANUAL |
+| N / M / J | sirena: siguiente pitch · velocidad del LFO · latch |
 | E / R (mantener) | throw al echo / al spring |
 | F (mantener) | freeze del echo |
 | K / T | kill del echo / tap tempo |
@@ -111,6 +117,13 @@ arrastrando un archivo.
 - **Biblioteca**: carpetas a la izquierda, temas a la derecha, buscador. **ORDEN** alterna entre
   nombre y fecha de modificación (los más nuevos primero; con "TODOS LOS TEMAS" ves lo último que
   agregaste en toda la biblioteca). La lista que mueve el BROWSE se marca en ámbar y sigue a la selección.
+- **Loops**: al cargar un tema se detecta el BPM y la grilla de beats (se ve en el zoom de la forma de
+  onda). Con **Q** (QUANTIZE) prendido, LOOP IN / OUT caen en el beat más cercano. El loop se ve en
+  verde (lleno = andando, contorno = guardado para RELOOP) y el deck muestra su largo en beats.
+  El BPM se busca entre 58 y 120 (el skank a contratiempo engaña hacia el doble); si un tema más rápido
+  queda a la mitad, clic en "BPM" → ×2.
+- **Monitor MIDI** (en AUDIO / SALIDAS): muestra cada mensaje que llega y qué hizo. Si un botón no
+  responde, ahí se ve si llega, si lo tomó el mapeo de fábrica o si quedó asignado en MAPEO MIDI.
 - **Decks**: el tema se decodifica en segundo plano a la memoria (unos 10 MB por minuto). Los
   saltos de cue, hot cues, loops y scratch son instantáneos. Sólo se guardan en memoria los dos temas
   cargados, nunca la biblioteca entera. Arrastrá temas desde el Finder o desde la biblioteca a un deck.
@@ -126,10 +139,13 @@ arrastrando un archivo.
   con THROW (mantener) o ENVÍO FIJO; NIV. ENVÍO es el nivel. El punto ENTRANDO se prende mientras entra.
 - **Spring**: modelo físico de un tanque de 3 resortes: cada resorte es un loop con 60 allpass
   dispersivos, así cada rebote llega como el "chirp" metálico de un resorte real y cada vuelta es más
-  dispersa que la anterior. TENSIÓN, COLA, TONO, y entrada desde el echo.
-- **Sirenas**: dos tonos, láser, ondulante, caída y sub drop, con tono y velocidad. Suenan como una
-  sirena a transistores: LFO por red RC, caída de pitch tipo descarga de capacitor, deriva del oscilador
-  y etapa de salida con filtro y saturación.
+  dispersa que la anterior. Calibrado contra la referencia: banda de ~400 Hz a ~2,5 kHz, cola de ~3,5 s
+  con COLA al 60 %, estéreo bien abierto. TENSIÓN, COLA, TONO, y entrada desde el echo.
+- **Sirena dub** al estilo Benidub DS01, calibrada contra una grabación de referencia: onda cuadrada
+  con filtro cálido fijo, 4 TONOS (SENO 1, SENO 2, TEST, CUADRADA), PITCH grave / media / aguda,
+  LFO lento / medio / rápido, MANUAL (mantener: el tono sube como un capacitor cargándose; soltar: baja)
+  y LATCH. Al soltar, el tono cae ~3,5 semitonos y se apaga en ~80 ms, como la referencia. TONO FINO y
+  VELOC. FINA (o el XY del nanoPAD2) ajustan sobre lo elegido.
 - **Samples**: 16 ranuras. Clic derecho o arrastrar un archivo para cargar. Se recuerdan al reabrir.
 - **Entrada en vivo**: micrófono o línea de la placa, con envío al echo.
 - **Master**: filtros HP y LP separados (24 dB, analógicos, con resonancia), drive, nivel, limitador, vúmetros y **REC**. La grabación queda

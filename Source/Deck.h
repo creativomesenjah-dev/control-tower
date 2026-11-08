@@ -28,6 +28,8 @@ struct TrackAudio
     std::atomic<bool> cancel { false };   // el deck lo reemplazó: dejar de decodificar
     std::atomic<int64_t> decodedFrames { 0 };
     std::atomic<bool> finished { false }, failed { false };
+    // grilla de beats (la calcula el cargador al terminar de decodificar; 0 = todavía no / no se pudo)
+    std::atomic<double> bpm { 0.0 }, firstBeat { 0.0 };
     std::string title, path;
 
     void allocate (int64_t frames, int channels, float sr)
@@ -55,7 +57,8 @@ enum class DeckCmd : int
 {
     PlayToggle, Cue, Hotcue, HotcueClear, Seek, SeekFrac, JumpStart,
     LoopIn, LoopOut, Reloop, LoopHalve, LoopDouble,
-    JogTouch, JogScratch, JogBend, JogSearch
+    JogTouch, JogScratch, JogBend, JogSearch,
+    ReloopStop, BeatJump, LoopAdjustIn, LoopAdjustOut, BpmScale
 };
 
 struct DeckCommand
@@ -87,6 +90,7 @@ public:
     // pitch: -1..1 del fader de tempo; range: 0.08, 0.16, 0.5
     void setPitch (float pitch, float range) { pitchAmount.store (pitch); pitchRange.store (range); }
     float getRate() const { return 1.0f + pitchAmount.load() * pitchRange.load(); }
+    void setQuantize (bool q) { quantize.store (q); }
 
     void pushCommand (const DeckCommand& c)
     {
@@ -106,6 +110,10 @@ public:
     double getLoopInSeconds() const       { return loopInSec.load(); }
     double getLoopOutSeconds() const      { return loopOutSec.load(); }
     bool   isJogTouched() const           { return touched; }
+    // 0 = nada, 1 = ajustando el inicio con el plato, 2 = ajustando el final
+    int    getLoopAdjust() const          { return adjustState.load(); }
+    double getLoopBeats() const           { return loopBeats.load(); }
+    double getBpm() const                 { TrackAudio* t = track.load(); return t != nullptr ? t->bpm.load() : 0.0; }
 
     // Escribe el audio del deck (estéreo) en L/R. Llamar desde el hilo de audio.
     void process (float* L, float* R, int n)
@@ -116,6 +124,16 @@ public:
         drainCommands();
 
         TrackAudio* t = track.load();
+        // LOOP IN mantenido medio segundo: loop automático de 4 beats desde el punto marcado
+        if (t != nullptr && loopInHeld && ! autoLoopDone)
+        {
+            loopInHeldSec += (double) n / deviceSr;
+            if (loopInHeldSec >= 0.5 && loopIn >= 0.0)
+            {
+                setLoop (loopIn, loopIn + 4.0 * beatFrames());
+                autoLoopDone = true;
+            }
+        }
         if (t == nullptr)
         {
             std::fill (L, L + n, 0.0f); std::fill (R, R + n, 0.0f);
@@ -175,7 +193,7 @@ public:
 
             pos += v;
             if (loopActive && v > 0.0 && pos >= loopOut)
-                pos -= (loopOut - loopIn);
+                pos = loopIn + std::fmod (pos - loopOut, loopOut - loopIn);
             if (pos < 0.0) pos = 0.0;
             if (pos >= len)
             {
@@ -209,7 +227,36 @@ private:
         cuePoint = 0.0;
         hotcues.fill (-1.0);
         loopIn = loopOut = -1.0; loopActive = false;
+        loopInHeld = false; adjust = 0;
         scratchTicks = 0.0; scratchVel = 0.0;
+    }
+
+    // --- grilla de beats
+    double beatFrames() const
+    {
+        TrackAudio* t = track.load();
+        const double b = t != nullptr ? t->bpm.load() : 0.0;
+        return 60.0 * sr() / (b > 1.0 ? b : 75.0);     // sin BPM detectado: 75 (tempo típico de dub)
+    }
+    double snap (double x) const
+    {
+        TrackAudio* t = track.load();
+        if (! quantize.load() || t == nullptr || t->bpm.load() <= 1.0) return x;
+        const double b = beatFrames(), f = t->firstBeat.load();
+        double y = f + std::round ((x - f) / b) * b;
+        if (y < 0.0) y += b;                                   // al principio del tema: el primer beat
+        const double len = (double) t->lengthFrames.load();
+        if (y > len) y -= b;
+        return std::max (0.0, y);
+    }
+    void setLoop (double in, double out)
+    {
+        TrackAudio* t = track.load();
+        const double len = t != nullptr ? (double) t->lengthFrames.load() : 0.0;
+        in = std::clamp (in, 0.0, len);
+        out = std::clamp (out, in + 0.005 * sr(), std::max (len, in + 0.005 * sr()));
+        loopIn = in; loopOut = out; loopActive = true;
+        if (pos >= loopOut) pos = loopIn + std::fmod (pos - loopIn, loopOut - loopIn);
     }
 
     void drainCommands()
@@ -282,44 +329,93 @@ private:
             case DeckCmd::SeekFrac:  pos = std::clamp (c.value, 0.0, 1.0) * (double) t->lengthFrames.load(); break;
             case DeckCmd::JumpStart: pos = 0.0; break;
 
+            // ---- loops, como en rekordbox: un loop nuevo siempre reemplaza al anterior
             case DeckCmd::LoopIn:
-                loopIn = pos; loopOut = -1.0; loopActive = false;
+                if (press)
+                {
+                    loopIn = snap (pos); loopOut = -1.0; loopActive = false; adjust = 0;
+                    loopInHeld = true; loopInHeldSec = 0.0; autoLoopDone = false;
+                }
+                else loopInHeld = false;
                 break;
 
             case DeckCmd::LoopOut:
-                if (loopIn >= 0.0 && pos > loopIn + 0.01 * s) { loopOut = pos; loopActive = true; pos = loopIn; }
+                if (press && loopIn >= 0.0 && ! loopActive)
+                {
+                    double out = snap (pos);
+                    if (out <= loopIn + 0.005 * s) out = loopIn + (quantize.load() && t->bpm.load() > 1.0 ? beatFrames() : 0.01 * s);
+                    setLoop (loopIn, out);
+                }
                 break;
 
-            case DeckCmd::Reloop:
-                if (loopActive) loopActive = false;
+            case DeckCmd::Reloop:      // con loop: salir · sin loop: volver al último
+                if (! press) break;
+                if (loopActive) { loopActive = false; adjust = 0; }
                 else if (loopIn >= 0.0 && loopOut > loopIn) { loopActive = true; pos = loopIn; }
                 break;
 
-            case DeckCmd::LoopHalve:
-                if (loopIn >= 0.0 && loopOut > loopIn)
+            case DeckCmd::ReloopStop:  // volver al loop y frenar
+                if (press && loopIn >= 0.0 && loopOut > loopIn)
+                {
+                    loopActive = true; pos = loopIn; playing = false; cuePreview = false; hotPreview = -1; velocity = 0.0;
+                }
+                break;
+
+            case DeckCmd::LoopHalve:   // sólo con un loop andando
+                if (press && loopActive)
                 {
                     const double l = (loopOut - loopIn) * 0.5;
-                    if (l > 0.005 * s) { loopOut = loopIn + l; if (pos >= loopOut) pos = loopIn + std::fmod (pos - loopIn, l); }
+                    if (l > 0.005 * s) setLoop (loopIn, loopIn + l);
                 }
                 break;
 
             case DeckCmd::LoopDouble:
-                if (loopIn >= 0.0 && loopOut > loopIn)
-                    loopOut = std::min ((double) t->lengthFrames.load(), loopIn + (loopOut - loopIn) * 2.0);
+                if (press && loopActive)
+                    setLoop (loopIn, std::min ((double) t->lengthFrames.load(), loopIn + (loopOut - loopIn) * 2.0));
+                break;
+
+            case DeckCmd::BeatJump:    // value = beats (con signo)
+            {
+                const double d = c.value * beatFrames();
+                pos = std::clamp (pos + d, 0.0, (double) t->lengthFrames.load());
+                if (loopActive && (pos < loopIn || pos >= loopOut)) { loopActive = false; adjust = 0; }
+                break;
+            }
+
+            case DeckCmd::LoopAdjustIn:
+                if (press && loopActive) adjust = adjust == 1 ? 0 : 1;
+                break;
+            case DeckCmd::LoopAdjustOut:
+                if (press && loopActive) adjust = adjust == 2 ? 0 : 2;
+                break;
+
+            case DeckCmd::BpmScale:    // corrección manual del BPM detectado (x2, /2)
+                if (t->bpm.load() > 1.0)
+                {
+                    const double nb = std::clamp (t->bpm.load() * c.value, 40.0, 250.0);
+                    t->bpm.store (nb);
+                    t->firstBeat.store (std::fmod (t->firstBeat.load(), 60.0 * s / nb));
+                }
                 break;
 
             case DeckCmd::JogTouch:
-                touched = press;
-                if (press) { scratchTicks = 0.0; scratchVel = velocity / std::max (1.0e-6, 1.0); }
+                touched = press && adjust == 0;
+                if (touched) { scratchTicks = 0.0; scratchVel = velocity / std::max (1.0e-6, 1.0); }
                 break;
 
             case DeckCmd::JogScratch:
-                if (touched) scratchTicks += c.value;
-                else bend = std::clamp (bend + c.value * 0.004, -0.5, 0.5);
-                break;
-
             case DeckCmd::JogBend:
-                bend = std::clamp (bend + c.value * 0.004, -0.5, 0.5);
+                if (adjust != 0 && loopActive)
+                {
+                    // ajuste fino del loop con el plato: 1 ms por paso
+                    const double d = c.value * 0.001 * s;
+                    if (adjust == 1) loopIn = std::clamp (loopIn + d, 0.0, loopOut - 0.005 * s);
+                    else             loopOut = std::clamp (loopOut + d, loopIn + 0.005 * s, (double) t->lengthFrames.load());
+                    if (pos >= loopOut || pos < loopIn) pos = loopIn;
+                    break;
+                }
+                if (c.type == DeckCmd::JogScratch && touched) scratchTicks += c.value;
+                else bend = std::clamp (bend + c.value * 0.004, -0.5, 0.5);
                 break;
 
             case DeckCmd::JogSearch:
@@ -336,7 +432,10 @@ private:
         cueSec.store (cuePoint / s);
         for (int i = 0; i < kNumHotcues; ++i)
             hotcueSec[(size_t) i].store (hotcues[(size_t) i] < 0.0 ? -1.0 : hotcues[(size_t) i] / s);
+        if (! loopActive) adjust = 0;
         loopActiveState.store (loopActive);
+        adjustState.store (adjust);
+        loopBeats.store (loopIn >= 0.0 && loopOut > loopIn ? (loopOut - loopIn) / beatFrames() : 0.0);
         loopInSec.store (loopIn < 0.0 ? -1.0 : loopIn / s);
         loopOutSec.store (loopOut < 0.0 ? -1.0 : loopOut / s);
     }
@@ -350,6 +449,12 @@ private:
     double pos = 0.0, velocity = 0.0, bend = 0.0, cuePoint = 0.0;
     double loopIn = -1.0, loopOut = -1.0;
     bool loopActive = false, playing = false, cuePreview = false, touched = false;
+    bool loopInHeld = false, autoLoopDone = false;
+    double loopInHeldSec = 0.0;
+    int adjust = 0;
+    std::atomic<bool> quantize { true };
+    std::atomic<int> adjustState { 0 };
+    std::atomic<double> loopBeats { 0.0 };
     int hotPreview = -1;
     double scratchTicks = 0.0, scratchVel = 0.0;
     std::array<double, kNumHotcues> hotcues { -1, -1, -1, -1, -1, -1, -1, -1 };

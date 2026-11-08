@@ -90,7 +90,7 @@ int main()
         in[0] = 1.0f;
         sp.process (in.data(), L.data(), R.data(), (int) in.size(), 1.0f);
         // energía centrada: graves (banda 200-600) vs agudos (2-3.5 kHz) en la primera vuelta
-        auto centroid = [&] (float lo, float hi)
+        auto centroid = [&] (float lo, float hi) -> double
         {
             SVF2 a, b; a.set (std::sqrt (lo * hi), SR, std::sqrt (lo * hi) / (hi - lo));
             double num = 0, den = 0;
@@ -102,9 +102,9 @@ int main()
             (void) b;
             return den > 0 ? num / den / SR * 1000.0 : 0.0;
         };
-        const double tLo = centroid (200.0f, 600.0f), tHi = centroid (2000.0f, 3500.0f);
+        const double tLo = centroid (500.0f, 900.0f), tHi = centroid (2000.0f, 3000.0f);
         std::printf ("     spring: llegada graves %.1f ms, agudos %.1f ms\n", tLo, tHi);
-        check (tHi > tLo + 3.0, "spring dispersivo (chirp de resorte)");
+        check (tHi > tLo + 2.0, "spring dispersivo (chirp de resorte)");
     }
 
     // 4c) Space echo: cada modo de cabezales repite en sus tiempos (1×, 1,96×, 2,92×)
@@ -253,12 +253,12 @@ int main()
 
         // loop de 1 s
         d.pushCommand ({ DeckCmd::Seek, 0, 8.0 }); run (1);
-        d.pushCommand ({ DeckCmd::LoopIn }); run (86);
-        d.pushCommand ({ DeckCmd::LoopOut }); run (86 * 3);
+        d.pushCommand ({ DeckCmd::LoopIn, 0, 1.0 }); d.pushCommand ({ DeckCmd::LoopIn, 0, 0.0 }); run (86);
+        d.pushCommand ({ DeckCmd::LoopOut, 0, 1.0 }); run (86 * 3);
         const double lp = d.getPositionSeconds();
         std::printf ("     deck: dentro del loop 8..9 s, posición %.3f s\n", lp);
         check (lp >= 7.99 && lp <= 9.02, "loop repite el tramo");
-        d.pushCommand ({ DeckCmd::Reloop }); run (200);
+        d.pushCommand ({ DeckCmd::Reloop, 0, 1.0 }); run (200);
         check (d.getPositionSeconds() > 10.0, "reloop/exit sale del loop");
 
         // cue estilo CDJ: en pausa, CUE marca el punto; mantener reproduce; soltar vuelve

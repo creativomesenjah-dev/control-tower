@@ -302,16 +302,70 @@ int main (int argc, char** argv)
         // loop manual desde la FLX4: LOOP IN, 1 s después LOOP OUT -> repite ese segundo
         flx (0x90, 0x10, 0x7F); flx (0x90, 0x10, 0x00);
         const double loopStart = c.e.deck (0).getPositionSeconds();
+
         c.run (1.0);
         flx (0x90, 0x11, 0x7F); flx (0x90, 0x11, 0x00);
         c.run (2.5);
         const double inLoop = c.e.deck (0).getPositionSeconds();
-        std::printf ("     loop FLX4: in %.2f s, después de 2,5 s más la posición es %.2f s (activo: %d)\n",
-                     loopStart, inLoop, (int) c.e.deck (0).isLoopActive());
+        std::printf ("     loop FLX4: in %.2f s, después de 2,5 s más la posición es %.2f s (activo: %d, loop %.2f..%.2f, BPM %.2f)\n",
+                     loopStart, inLoop, (int) c.e.deck (0).isLoopActive(), c.e.deck (0).getLoopInSeconds(), c.e.deck (0).getLoopOutSeconds(), c.e.deck (0).getBpm());
         check (c.e.deck (0).isLoopActive() && inLoop >= loopStart - 0.02 && inLoop <= loopStart + 1.1, "FLX4: LOOP IN / LOOP OUT hacen loop");
         flx (0x90, 0x4D, 0x7F); flx (0x90, 0x4D, 0x00);
         c.run (2.0);
         check (! c.e.deck (0).isLoopActive() && c.e.deck (0).getPositionSeconds() > loopStart + 1.5, "FLX4: RELOOP/EXIT sale del loop");
+
+        {
+            auto& dk = c.e.deck (0);
+            const double beat = 60.0 / dk.getBpm();
+            check (std::abs (dk.getBpm() - 75.0) < 0.5, "BPM detectado del loop de prueba (75)");
+            auto onBeat = [&] (double sec) { const double k = sec / beat; return std::abs (k - std::round (k)) < 0.02; };
+
+            // ◀ sin loop andando no hace nada (antes te mandaba al loop viejo)
+            const double before = dk.getPositionSeconds();
+            flx (0x90, 0x51, 0x7F); flx (0x90, 0x51, 0x00); c.run (0.05);
+            check (! dk.isLoopActive() && dk.getPositionSeconds() > before, "FLX4 ◀ sin loop: no salta a un loop viejo");
+
+            // un loop nuevo, más adelante, reemplaza al anterior y queda al beat (QUANTIZE)
+            c.run (0.37);
+            flx (0x90, 0x10, 0x7F); flx (0x90, 0x10, 0x00);
+            c.run (1.9);
+            flx (0x90, 0x11, 0x7F); flx (0x90, 0x11, 0x00);
+            c.run (0.05);
+            const double li = dk.getLoopInSeconds(), lo = dk.getLoopOutSeconds();
+            std::printf ("     loop nuevo: %.3f..%.3f s (%.2f beats)\n", li, lo, dk.getLoopBeats());
+            check (dk.isLoopActive() && li > loopStart + 2.0 && onBeat (li) && onBeat (lo), "loop nuevo reemplaza al viejo y queda al beat");
+
+            // ◀ / ▶ con el loop andando: mitad y doble
+            const double l0 = dk.getLoopBeats();
+            flx (0x90, 0x51, 0x7F); flx (0x90, 0x51, 0x00); c.run (0.05);
+            const double l1 = dk.getLoopBeats();
+            flx (0x90, 0x53, 0x7F); flx (0x90, 0x53, 0x00); flx (0x90, 0x53, 0x7F); flx (0x90, 0x53, 0x00); c.run (0.05);
+            const double l2 = dk.getLoopBeats();
+            std::printf ("     loop: %.2f -> ◀ %.2f -> ▶▶ %.2f beats\n", l0, l1, l2);
+            check (std::abs (l1 - l0 * 0.5) < 0.01 && std::abs (l2 - l0 * 2.0) < 0.01, "FLX4 ◀ ▶: mitad y doble del loop");
+
+            // SHIFT + LOOP OUT y el plato: ajusta el final
+            flx (0x90, 0x4E, 0x7F); flx (0x90, 0x4E, 0x00); c.run (0.02);
+            const double outBefore = dk.getLoopOutSeconds();
+            for (int k = 0; k < 10; ++k) ctrl.dispatch ("DDJ-FLX4", juce::MidiMessage (0xB0, 0x21, 64 - 10));
+            c.run (0.02);
+            std::printf ("     ajuste del final con el plato: %.3f -> %.3f s\n", outBefore, dk.getLoopOutSeconds());
+            check (dk.getLoopAdjust() == 2 && dk.getLoopOutSeconds() < outBefore - 0.05, "SHIFT + LOOP OUT + plato: ajusta el final del loop");
+            flx (0x90, 0x4E, 0x7F); flx (0x90, 0x4E, 0x00);
+
+            // RELOOP sale; LOOP IN mantenido medio segundo = loop de 4 beats
+            flx (0x90, 0x4D, 0x7F); flx (0x90, 0x4D, 0x00); c.run (0.3);
+            flx (0x90, 0x10, 0x7F); c.run (0.7); flx (0x90, 0x10, 0x00); c.run (0.05);
+            std::printf ("     LOOP IN mantenido: %.2f beats, activo %d\n", dk.getLoopBeats(), (int) dk.isLoopActive());
+            check (dk.isLoopActive() && std::abs (dk.getLoopBeats() - 4.0) < 0.01, "LOOP IN mantenido: loop automático de 4 beats");
+
+            // SHIFT + ▶: 32 beats adelante (y sale del loop)
+            const double p0 = dk.getPositionSeconds();
+            flx (0x90, 0x3D, 0x7F); flx (0x90, 0x3D, 0x00); c.run (0.03);
+            const double jump = dk.getPositionSeconds() - p0;
+            std::printf ("     SHIFT + ▶: salto de %.2f s (32 beats = %.2f s)\n", jump, 32.0 * beat);
+            check (std::abs (jump - 32.0 * beat) < 0.15 && ! dk.isLoopActive(), "SHIFT + ▶: 32 beats adelante");
+        }
 
         std::printf ("     samples de fábrica:");
         for (auto& f : files) std::printf (" %s", f.getFileNameWithoutExtension().toRawUTF8());
@@ -389,7 +443,13 @@ int main (int argc, char** argv)
         q.set (P::FaderA, 0.0f); seg (3.0);           // la cola del resorte sola
         q.set (P::FaderA, 1.0f);
         // 4) sirenas, al echo
-        for (int s = 0; s < 4; ++s) { d.e.setSiren (s, Hold::Mouse, true); seg (1.2); d.e.setSiren (s, Hold::Mouse, false); seg (1.6); }
+        for (int pitch : { 1, 2 })
+        {
+            q.set (P::SirenPitchPos, (float) pitch);
+            for (int s = 0; s < 4; ++s) { d.e.setSiren (s, Hold::Mouse, true); seg (1.2); d.e.setSiren (s, Hold::Mouse, false); seg (1.2); }
+        }
+        q.set (P::SirenPitchPos, 1.0f);
+        for (int k = 0; k < 2; ++k) { d.e.setSiren (kSirenManual, Hold::Mouse, true); seg (0.9); d.e.setSiren (kSirenManual, Hold::Mouse, false); seg (1.6); }
         // 5) filtros master: LP barrido con resonancia, después HP
         q.set (P::MRes, 0.7f);
         for (int k = 0; k <= 50; ++k) { q.set (P::MLp, 20000.0f * std::pow (150.0f / 20000.0f, (float) k / 50.0f)); seg (0.05); }

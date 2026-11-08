@@ -100,6 +100,9 @@ MainComponent::MainComponent()
         { 'e', [this] (bool d) { controller.perform (A::EchoThrow, Hold::Keyboard, d); } },
         { 'r', [this] (bool d) { controller.perform (A::RevThrow, Hold::Keyboard, d); } },
         { 'f', [this] (bool d) { controller.perform (A::EchoFreeze, Hold::Keyboard, d); } },
+        { 'n', [this] (bool d) { controller.perform (A::SirenPitchNext, Hold::Keyboard, d); } },
+        { 'm', [this] (bool d) { controller.perform (A::SirenSpeedNext, Hold::Keyboard, d); } },
+        { 'j', [this] (bool d) { controller.perform (A::SirenLatchT, Hold::Keyboard, d); } },
     };
 
     // ----- audio

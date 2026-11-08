@@ -4,6 +4,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <memory>
 #include "Deck.h"
+#include "BeatDetect.h"
 
 namespace ct
 {
@@ -99,7 +100,12 @@ private:
         }
 
         if (! t.cancel.load())
+        {
             t.lengthFrames.store (juce::jmax ((juce::int64) 1, pos));
+            const auto grid = detectBeatGrid (t.left.data(), t.right.data(), pos, (double) t.sampleRate);
+            t.firstBeat.store (grid.firstBeat);
+            t.bpm.store (grid.bpm);
+        }
         t.finished.store (true);
     }
 

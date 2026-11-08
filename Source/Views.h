@@ -86,12 +86,34 @@ public:
         const double spp = zoom ? kZoomSeconds / w : len / juce::jmax (1, w);
 
         auto& dk = engine.deck (d);
-        // loop
-        if (dk.isLoopActive())
+        // grilla de beats (sólo en el zoom): una rayita por beat, más marcada cada 4
+        if (zoom && track->bpm.load() > 1.0)
         {
-            const float x1 = (float) ((dk.getLoopInSeconds() - t0) / spp), x2 = (float) ((dk.getLoopOutSeconds() - t0) / spp);
-            g.setColour (Colours::green.withAlpha (0.18f));
-            g.fillRect (juce::Rectangle<float>::leftTopRightBottom (juce::jmax (0.0f, x1), 0.0f, juce::jmin ((float) w, x2), (float) h));
+            const double beat = 60.0 / track->bpm.load(), first = track->firstBeat.load() / sr;
+            const double k0 = std::ceil ((t0 - first) / beat);
+            for (double k = k0; ; k += 1.0)
+            {
+                const double tb = first + k * beat;
+                const float x = (float) ((tb - t0) / spp);
+                if (x > (float) w) break;
+                const bool bar = ((long long) k % 4 + 4) % 4 == 0;
+                g.setColour (Colours::textDim.withAlpha (bar ? 0.55f : 0.25f));
+                g.fillRect (x, 0.0f, 1.0f, bar ? (float) h : (float) h * 0.18f);
+            }
+        }
+        // loop: andando = verde lleno; guardado (para RELOOP) = sólo el contorno
+        const double li = dk.getLoopInSeconds(), lo = dk.getLoopOutSeconds();
+        if (li >= 0.0)
+        {
+            const float x1 = (float) ((li - t0) / spp);
+            const float x2 = lo > li ? (float) ((lo - t0) / spp) : x1 + 2.0f;
+            const auto area = juce::Rectangle<float>::leftTopRightBottom (juce::jmax (-2.0f, x1), 0.0f, juce::jmin ((float) w + 2.0f, x2), (float) h);
+            g.setColour (Colours::green.withAlpha (dk.isLoopActive() ? 0.22f : 0.07f));
+            g.fillRect (area);
+            g.setColour (Colours::green.withAlpha (dk.isLoopActive() ? 0.9f : 0.45f));
+            const int adj = dk.getLoopAdjust();
+            g.fillRect (x1 - (adj == 1 ? 1.5f : 0.5f), 0.0f, adj == 1 ? 3.0f : 1.0f, (float) h);
+            if (lo > li) g.fillRect (x2 - (adj == 2 ? 1.5f : 0.5f), 0.0f, adj == 2 ? 3.0f : 1.0f, (float) h);
         }
 
         const auto* pk = track->peaks.data();
@@ -189,6 +211,8 @@ public:
             addAndMakeVisible (b);
         };
         mk ("IN", DeckCmd::LoopIn);
+        buttons.getLast()->onRelease = [this] { engine.deck (d).pushCommand ({ DeckCmd::LoopIn, 0, 0.0 }); };
+        buttons.getLast()->setTooltip (u8 ("Marca el inicio (al beat con QUANTIZE). Mantener medio segundo: loop de 4 beats."));
         mk ("OUT", DeckCmd::LoopOut, [this] { return engine.deck (d).isLoopActive(); });
         mk ("RELOOP", DeckCmd::Reloop, [this] { return engine.deck (d).isLoopActive(); });
         mk (u8 ("½"), DeckCmd::LoopHalve);
@@ -212,6 +236,24 @@ public:
             engine.params.set (r, (float) ((engine.params.choice (r) + 1) % 3));
         };
         addAndMakeVisible (rangeButton);
+
+        // BPM detectado: clic para corregir si quedó al doble o a la mitad
+        bpmButton.setWantsKeyboardFocus (false);
+        bpmButton.setTooltip (u8 ("BPM detectado. Clic: corregir (×2 / ÷2)."));
+        bpmButton.onClick = [this]
+        {
+            juce::PopupMenu m;
+            m.addItem (1, u8 ("BPM × 2"));
+            m.addItem (2, u8 ("BPM ÷ 2"));
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (bpmButton), [this] (int r)
+            {
+                if (r > 0) engine.deck (d).pushCommand ({ DeckCmd::BpmScale, 0, r == 1 ? 2.0 : 0.5 });
+            });
+        };
+        addAndMakeVisible (bpmButton);
+        quantize = std::make_unique<ParamToggle> (engine.params, P::Quantize, "Q", Colours::green);
+        quantize->setTooltip (u8 ("QUANTIZE: los loops se acomodan al beat más cercano."));
+        addAndMakeVisible (*quantize);
     }
 
     void refresh() override
@@ -236,6 +278,19 @@ public:
         const auto rt = juce::String (juce::CharPointer_UTF8 (rn[engine.params.choice (r)])) + "%";
         if (rangeButton.getButtonText() != rt) rangeButton.setButtonText (rt);
 
+        juce::String bt = "BPM --";
+        if (t != nullptr && t->bpm.load() > 1.0) bt = "BPM " + juce::String (t->bpm.load() * dk.getRate(), 1);
+        else if (t != nullptr && ! t->finished.load()) bt = "BPM ...";
+        const double lb = dk.getLoopBeats();
+        if (lb > 0.0)
+        {
+            const double r = lb >= 1.0 ? std::round (lb * 4.0) / 4.0 : lb;
+            bt << "  " << (dk.isLoopActive() ? "LOOP " : "loop ")
+               << (lb >= 1.0 ? juce::String (r, std::abs (r - std::round (r)) < 0.01 ? 0 : 2) : "1/" + juce::String (juce::roundToInt (1.0 / lb)));
+        }
+        if (bpmButton.getButtonText() != bt) bpmButton.setButtonText (bt);
+        quantize->refresh();
+
         cue.refresh(); play.refresh();
         for (auto* b : buttons) b->refresh();
         for (auto* b : hot) b->refresh();
@@ -248,8 +303,10 @@ public:
         auto r = content();
         auto top = r.removeFromTop (20);
         rangeButton.setBounds (top.removeFromRight (44).reduced (0, 1));
+        quantize->setBounds (top.removeFromRight (26).reduced (1, 1));
+        bpmButton.setBounds (top.removeFromRight (104).reduced (1, 1));
         pitchLabel.setBounds (top.removeFromRight (70));
-        timeLabel.setBounds (top.removeFromRight (150));
+        timeLabel.setBounds (top.removeFromRight (140));
         titleLabel.setBounds (top);
         r.removeFromTop (3);
         zoomWave.setBounds (r.removeFromTop (juce::jmax (40, r.getHeight() - 26 - 26 - 30 - 8)));
@@ -284,7 +341,8 @@ private:
     juce::Label titleLabel, timeLabel, pitchLabel;
     ActionButton cue, play;
     juce::OwnedArray<PressButton> buttons, hot;
-    juce::TextButton rangeButton;
+    juce::TextButton rangeButton, bpmButton;
+    std::unique_ptr<ParamToggle> quantize;
 };
 
 // ---------------------------------------------------------------------------
@@ -598,31 +656,45 @@ private:
 class SirenView : public Panel, public Refreshable
 {
 public:
-    SirenView (Engine& e, Controller& c) : Panel ("SIRENAS", Colours::red), engine (e)
+    // Panel como el de una Benidub DS01: 4 tonos, MANUAL, PITCH (3), LFO (3) y latch
+    SirenView (Engine& e, Controller& c) : Panel ("SIRENA DUB", Colours::red), engine (e)
     {
         auto& p = e.params;
         for (int i = 0; i < kNumSirenPresets; ++i)
         {
-            auto* b = sirens.add (new ActionButton (c, (A) ((int) A::Siren1 + i), u8 (sirenPreset (i).name), Colours::red));
-            b->litWhen = [this, i] { return engine.getSirenPlaying() == i; };
+            auto* b = sirens.add (new ActionButton (c, (A) ((int) A::Siren1 + i), u8 (sirenTriggerName (i)), Colours::red));
+            b->litWhen = [this, i] { return engine.getSirenPlaying() == i || engine.getSirenLatched() == i; };
             addAndMakeVisible (b);
         }
+        pitchB = std::make_unique<ActionButton> (c, A::SirenPitchNext, "PITCH", Colours::red);
+        speedB = std::make_unique<ActionButton> (c, A::SirenSpeedNext, "LFO", Colours::red);
+        latchB = std::make_unique<ParamToggle> (p, P::SirenLatch, "LATCH", Colours::red);
+        for (juce::Component* x : { (juce::Component*) pitchB.get(), (juce::Component*) speedB.get(), (juce::Component*) latchB.get() }) addAndMakeVisible (x);
         auto knob = [&] (P param, const char* name) { auto* k = knobs.add (new ParamKnob (p, param, u8 (name), Colours::red)); addAndMakeVisible (k); };
-        knob (P::SirenPitch, "TONO");
-        knob (P::SirenRate, "VELOC.");
+        knob (P::SirenPitch, "TONO FINO");
+        knob (P::SirenRate, "VELOC. FINA");
         knob (P::SirenLevel, "VOLUMEN");
         knob (P::SirenEcho, "AL ECHO");
     }
-    void refresh() override { for (auto* b : sirens) b->refresh(); for (auto* k : knobs) k->refresh(); }
+    void refresh() override
+    {
+        for (auto* b : sirens) b->refresh();
+        for (auto* k : knobs) k->refresh();
+        auto& p = engine.params;
+        pitchB->setButtonText (juce::String::fromUTF8 ("PITCH ") + juce::String::fromUTF8 (sirenPitchName (p.choice (P::SirenPitchPos))));
+        speedB->setButtonText (juce::String::fromUTF8 ("LFO ") + juce::String::fromUTF8 (sirenSpeedName (p.choice (P::SirenSpeed))));
+        latchB->refresh();
+    }
     void resized() override
     {
         auto r = content();
-        auto b1 = r.removeFromTop (24), b2 = r.removeFromTop (24);
-        const int w3 = b1.getWidth() / 3;
-        for (int i = 0; i < 3; ++i) sirens[i]->setBounds (b1.removeFromLeft (w3).reduced (1));
-        const int w2 = b2.getWidth() / 2;
-        for (int i = 3; i < 5; ++i) sirens[i]->setBounds (b2.removeFromLeft (w2).reduced (1));
-        r.removeFromTop (4);
+        auto b1 = r.removeFromTop (22), b2 = r.removeFromTop (22), b3 = r.removeFromTop (22), b4 = r.removeFromTop (22);
+        const int w2 = b1.getWidth() / 2;
+        sirens[0]->setBounds (b1.removeFromLeft (w2).reduced (1)); sirens[1]->setBounds (b1.reduced (1));
+        sirens[2]->setBounds (b2.removeFromLeft (w2).reduced (1)); sirens[3]->setBounds (b2.reduced (1));
+        sirens[4]->setBounds (b3.removeFromLeft (w2).reduced (1)); latchB->setBounds (b3.reduced (1));
+        pitchB->setBounds (b4.removeFromLeft (w2).reduced (1)); speedB->setBounds (b4.reduced (1));
+        r.removeFromTop (2);
         const int kw = r.getWidth() / 2, kh = r.getHeight() / 2;
         for (int i = 0; i < knobs.size(); ++i)
             knobs[i]->setBounds (r.getX() + (i % 2) * kw, r.getY() + (i / 2) * kh, kw, kh);
@@ -630,6 +702,8 @@ public:
 private:
     Engine& engine;
     juce::OwnedArray<ActionButton> sirens;
+    std::unique_ptr<ActionButton> pitchB, speedB;
+    std::unique_ptr<ParamToggle> latchB;
     juce::OwnedArray<ParamKnob> knobs;
 };
 

@@ -5,6 +5,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <functional>
 #include <map>
+#include <deque>
 #include "Engine.h"
 #include "Library.h"
 
@@ -59,11 +60,14 @@ enum class Kind { Hold, Trigger };
     X (EchoHeadNext,"echoHeadNext","Echo: siguiente modo de cabezales", Trigger) \
     X (RevThrow,   "revThrow",   "Spring: throw (mantener)",        Hold)    \
     X (RevLatchT,  "revLatchT",  "Spring: envío fijo on/off",       Trigger) \
-    X (Siren1,     "siren1",     "Sirena: dos tonos",               Hold)    \
-    X (Siren2,     "siren2",     "Sirena: láser",                   Hold)    \
-    X (Siren3,     "siren3",     "Sirena: ondulante",               Hold)    \
-    X (Siren4,     "siren4",     "Sirena: caída",                   Hold)    \
-    X (Siren5,     "siren5",     "Sirena: sub drop",                Hold)    \
+    X (Siren1,     "siren1",     "Sirena: SENO 1",                  Hold)    \
+    X (Siren2,     "siren2",     "Sirena: SENO 2",                  Hold)    \
+    X (Siren3,     "siren3",     "Sirena: TEST",                    Hold)    \
+    X (Siren4,     "siren4",     "Sirena: CUADRADA",                Hold)    \
+    X (Siren5,     "siren5",     "Sirena: MANUAL",                  Hold)    \
+    X (SirenPitchNext,"sirenPitchNext","Sirena: siguiente pitch",   Trigger) \
+    X (SirenSpeedNext,"sirenSpeedNext","Sirena: siguiente velocidad de LFO", Trigger) \
+    X (SirenLatchT,"sirenLatchT", "Sirena: latch on/off",           Trigger) \
     X (KillT1,     "killT1",     "Aislador: kill banda 1",          Trigger) \
     X (KillT2,     "killT2",     "Aislador: kill banda 2",          Trigger) \
     X (KillT3,     "killT3",     "Aislador: kill banda 3",          Trigger) \
@@ -124,6 +128,9 @@ public:
     juce::String describeMappingFor (int target) const;
     void clearMappingFor (int target);
     juce::String getLastMidi() const      { const juce::SpinLock::ScopedLockType sl (lastLock); return lastMidi; }
+    // monitor MIDI: los últimos mensajes con lo que hizo cada uno (el más nuevo arriba)
+    juce::String getMidiLog() const;
+    static juce::String describeFlx4 (int status, int d1);
 
     bool isFlx4Connected() const          { return flx4In.load(); }
     bool isFlx4MappingOn() const          { return flx4Enabled.load(); }
@@ -167,6 +174,9 @@ private:
     std::vector<Cand> learnCands;
     double learnStart = 0.0;
     std::map<int, bool> toggleLast;   // para CC usados como botón
+    struct LogLine { int key; juce::String text; };
+    std::deque<LogLine> midiLog;      // protegido por lastLock
+    void logMidi (int key, const juce::String& line);
 
     // estado FLX4
     std::atomic<bool> flx4Enabled { true }, flx4In { false }, tempoInvert { false };
